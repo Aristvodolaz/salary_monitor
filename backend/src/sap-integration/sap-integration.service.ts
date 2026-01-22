@@ -408,11 +408,12 @@ export class SapIntegrationService {
     // Вычисляем АЕИ по формуле: АЕИ = (Actdura / 60) * Норматив_АЕИ_в_час
     const calculatedAEI = (operation.actdura / 60) * (tariff.norm_aei_per_hour || 0);
     
-    // Рассчитываем сумму: Сумма = АЕИ * Расценка * Ккач
+    // Рассчитываем базовую сумму БЕЗ Ккач: Сумма = АЕИ * Расценка
+    // Ккач будет применяться на уровне SQL View к сумме за период!
     const rate = tariff.rate || 0;
-    const amount = calculatedAEI * rate * 1.0; // * Ккач (пока 1.0)
+    const amount = calculatedAEI * rate; // БЕЗ коэффициента качества
     
-    this.logger.debug(`💰 Расчет: ${operation.actdura.toFixed(2)}мин / 60 * ${tariff.norm_aei_per_hour} = ${calculatedAEI.toFixed(2)} АЕИ * ${rate}₽ = ${amount.toFixed(2)}₽`);
+    this.logger.debug(`💰 Расчет: ${operation.actdura.toFixed(2)}мин / 60 * ${tariff.norm_aei_per_hour} = ${calculatedAEI.toFixed(2)} АЕИ * ${rate}₽ = ${amount.toFixed(2)}₽ (без Ккач)`);
 
     // Проверка существования операции
     const checkQuery = `
