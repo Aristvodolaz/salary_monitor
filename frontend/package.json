@@ -1,0 +1,37 @@
+{
+  "name": "salary-monitor-frontend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.1",
+    "@mui/material": "^5.15.3",
+    "@mui/icons-material": "^5.15.3",
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "axios": "^1.6.5",
+    "date-fns": "^3.0.6",
+    "recharts": "^2.10.3",
+    "react-barcode-reader": "^0.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  }
+}
+
