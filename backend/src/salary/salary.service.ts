@@ -24,7 +24,7 @@ export class SalaryService {
         operations_count,
         total_aei,
         base_amount,
-        avg_quality_coefficient,
+        quality_coefficient,
         total_amount
       FROM v_salary_by_day
       WHERE user_id = @userId
@@ -91,7 +91,7 @@ export class SalaryService {
         operations_count,
         total_aei,
         base_amount,
-        avg_quality_coefficient,
+        quality_coefficient,
         total_amount
       FROM v_salary_by_day
       WHERE user_id = @userId
@@ -131,8 +131,8 @@ export class SalaryService {
         COUNT(DISTINCT CAST(operation_date AS DATE)) as total_work_days,
         COUNT(DISTINCT operation_id) as total_operations,
         SUM(aei_count) as total_aei,
-        SUM(final_amount) as total_earned,
-        AVG(final_amount) as avg_per_operation,
+        SUM(base_amount) as total_earned,
+        AVG(base_amount) as avg_per_operation,
         MAX(operation_date) as last_operation_date
       FROM v_salary_details
       WHERE user_id = @userId

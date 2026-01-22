@@ -49,7 +49,7 @@ export class AdminService {
         COUNT(DISTINCT CAST(sd.operation_date AS DATE)) as work_days,
         COUNT(DISTINCT sd.operation_id) as total_operations,
         SUM(sd.aei_count) as total_aei,
-        SUM(sd.final_amount) as total_amount
+        SUM(sd.base_amount) as total_amount
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.warehouse_id = @warehouseId
@@ -106,7 +106,7 @@ export class AdminService {
         COUNT(DISTINCT user_id) as active_employees,
         COUNT(DISTINCT operation_type) as operation_types,
         SUM(aei_count) as total_aei,
-        SUM(final_amount) as total_amount,
+        SUM(base_amount) as total_amount,
         COUNT(*) as total_operations
       FROM v_salary_details
       WHERE warehouse_code = (

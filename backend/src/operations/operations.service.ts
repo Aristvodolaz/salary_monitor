@@ -28,12 +28,11 @@ export class OperationsService {
         warehouse_code,
         warehouse_name,
         operation_type,
+        participant_area,
         aei_count,
         operation_date,
         rate,
-        base_amount,
-        quality_coefficient,
-        final_amount
+        base_amount
       FROM v_salary_details
       WHERE user_id = @userId
     `;
@@ -98,8 +97,8 @@ export class OperationsService {
         operation_type,
         COUNT(*) as operations_count,
         SUM(aei_count) as total_aei,
-        SUM(final_amount) as total_amount,
-        AVG(final_amount) as avg_amount
+        SUM(base_amount) as total_amount,
+        AVG(base_amount) as avg_amount
       FROM v_salary_details
       WHERE user_id = @userId
     `;
