@@ -10,7 +10,7 @@ import {
   ToggleButton,
   Alert,
 } from '@mui/material';
-import { TrendingUp, AccountBalance, CalendarToday } from '@mui/icons-material';
+// Icons removed - not used in current implementation
 import { salaryAPI, operationsAPI } from '../services/api';
 import { format, subDays, startOfMonth, subMonths } from 'date-fns';
 import { ru } from 'date-fns/locale';

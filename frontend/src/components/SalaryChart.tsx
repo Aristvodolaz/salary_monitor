@@ -1,19 +1,16 @@
 import { Card, CardContent, Typography, Box, useTheme, Fade, Grow } from '@mui/material';
 import {
-  AreaChart,
   Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   ComposedChart,
-  Bar,
 } from 'recharts';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { TrendingUp, TrendingDown, Remove } from '@mui/icons-material';
+import { TrendingUp, TrendingDown } from '@mui/icons-material';
 
 interface SalaryChartProps {
   data: Array<{

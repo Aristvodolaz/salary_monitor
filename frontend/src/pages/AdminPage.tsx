@@ -22,7 +22,7 @@ import { adminAPI } from '../services/api';
 import { format, subMonths } from 'date-fns';
 
 const AdminPage = () => {
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [, setEmployees] = useState<any[]>([]);
   const [salaryData, setSalaryData] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);

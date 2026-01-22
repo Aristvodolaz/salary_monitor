@@ -1,5 +1,5 @@
-import { Card, CardContent, Typography, Box, useTheme, Fade, Grow } from '@mui/material';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { Card, CardContent, Typography, Box, useTheme, Grow } from '@mui/material';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface OperationsDonutChartProps {
   data: Array<{
@@ -66,7 +66,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({ data }) => 
     return null;
   };
 
-  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+  const renderCustomLabel = ({ cx, cy, midAngle, outerRadius, percent }: any) => {
     if (percent < 0.05) return null; // Не показывать метки для маленьких сегментов
     
     const RADIAN = Math.PI / 180;
@@ -139,7 +139,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({ data }) => 
 
               {/* Легенда с детализацией */}
               <Box sx={{ flex: { xs: 'none', md: 1 }, width: '100%' }}>
-                {chartData.map((item, index) => (
+                {chartData.map((item) => (
                   <Box
                     key={item.name}
                     sx={{
