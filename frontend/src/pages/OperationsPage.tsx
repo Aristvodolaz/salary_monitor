@@ -137,7 +137,7 @@ const OperationsPage = () => {
                   <TableCell align="right">{(op.rate || 0).toFixed(2)} ₽</TableCell>
                   <TableCell align="right">
                     <Typography fontWeight="bold" color="primary.main">
-                      {(op.final_amount || 0).toFixed(2)} ₽
+                      {(op.base_amount || 0).toFixed(2)} ₽
                     </Typography>
                   </TableCell>
                 </TableRow>
