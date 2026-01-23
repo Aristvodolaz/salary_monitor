@@ -195,8 +195,14 @@ export class SapIntegrationService {
       // Пока храним время, АЕИ будем вычислять при расчете зарплаты
       const actduraMinutes = parseFloat(item.Actdura || '0');
 
+      // Формируем ФИО из SAP полей
+      const lastName = (item.McName1 || '').trim();        // Фамилия
+      const firstName = (item.McName2 || '').trim();       // Имя Отчество
+      const fullName = `${lastName} ${firstName}`.trim() || `Сотрудник ${item.Employeeid || item.Processor}`;
+
       return {
         employeeId: item.Employeeid || item.Processor,     // ID сотрудника
+        employeeName: fullName,                            // ФИО сотрудника
         warehouseCode: item.Lgnum,                         // Склад
         participantArea: participantArea,                   // Участок (М2, М3, и т.д.)
         operationType: finalOperationType,                 // Тип комплектации
@@ -347,17 +353,19 @@ export class SapIntegrationService {
       );
 
       if (warehouse) {
+        const fio = operation.employeeName || `Сотрудник ${operation.employeeId}`;
+        
         await this.db.execute(
           `INSERT INTO users (employee_id, fio, warehouse_id, role, is_active)
            VALUES (@employeeId, @fio, @warehouseId, 'employee', 1)`,
           {
             employeeId: operation.employeeId,
-            fio: `Сотрудник ${operation.employeeId}`,
+            fio: fio,
             warehouseId: warehouse.id,
           }
         );
 
-        this.logger.log(`✅ Создан новый пользователь: ${operation.employeeId}`);
+        this.logger.log(`✅ Создан новый пользователь: ${operation.employeeId} (${fio})`);
 
         // Повторно получаем пользователя
         user = await this.db.queryOne(

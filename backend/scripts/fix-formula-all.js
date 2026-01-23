@@ -16,23 +16,16 @@ const path = require('path');
 require('dotenv').config();
 
 const config = {
-  user: process.env.DB_USER || 'sa',
-  password: process.env.DB_PASSWORD || 'icY2eGuyfU',
-  server: process.env.DB_HOST || 'PRM-SRV-MSSQL-01.komus.net',
-  port: parseInt(process.env.DB_PORT || '59587'),
-  database: process.env.DB_NAME || 'SalaryMonitor',
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  server: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT),
+  database: process.env.DB_NAME,
   options: {
     encrypt: false,
     trustServerCertificate: true
   }
 };
-
-console.log('🔧 Конфигурация БД:', {
-  server: config.server,
-  port: config.port,
-  database: config.database,
-  user: config.user
-});
 
 async function executeSqlFile(filePath, description) {
   console.log(`\n${'='.repeat(60)}`);
