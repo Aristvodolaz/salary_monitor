@@ -55,7 +55,7 @@ const LoginPage = () => {
                 SalaryMonitor
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ fontSize: { xs: '1rem', sm: '0.875rem' } }}>
-                Войдите, отсканировав штрих-код или введя Employee ID
+                Войдите, отсканировав штрих-код или введя ШК сотрудника
               </Typography>
             </Box>
 
@@ -68,7 +68,7 @@ const LoginPage = () => {
             <form onSubmit={handleLogin}>
               <TextField
                 fullWidth
-                label="Employee ID (Штрих-код)"
+                label="ШК сотрудника"
                 variant="outlined"
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}

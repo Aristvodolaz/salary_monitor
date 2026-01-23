@@ -53,7 +53,7 @@ const Layout = () => {
           {user?.fio}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          ID: {user?.employeeId}
+          ШК: {user?.employeeId}
         </Typography>
       </Box>
 

@@ -190,7 +190,7 @@ const AdminPage = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Employee ID</TableCell>
+                  <TableCell>ШК</TableCell>
                   <TableCell>ФИО</TableCell>
                   <TableCell align="right">Рабочих дней</TableCell>
                   <TableCell align="right">Операций</TableCell>
