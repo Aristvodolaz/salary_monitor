@@ -59,6 +59,9 @@ export class SapIntegrationService {
     }
 
     this.logger.log('\n✅ Синхронизация завершена');
+    
+    // Обновляем salary_summary после синхронизации
+    await this.updateSalarySummary();
   }
 
   /**
@@ -508,6 +511,49 @@ export class SapIntegrationService {
       recordsProcessed,
       errorMessage: errorMessage || null,
     });
+  }
+
+  /**
+   * Обновить salary_summary из v_salary_by_month
+   * Вызывается после каждой синхронизации с SAP
+   */
+  private async updateSalarySummary(): Promise<void> {
+    this.logger.log('📊 Обновление salary_summary...');
+    
+    try {
+      // Удаляем старые данные
+      await this.db.execute('TRUNCATE TABLE salary_summary');
+      
+      // Заполняем из v_salary_by_month
+      const insertQuery = `
+        INSERT INTO salary_summary (
+          user_id,
+          period_start,
+          period_end,
+          total_amount,
+          quality_coefficient,
+          errors_count
+        )
+        SELECT 
+          user_id,
+          period_start,
+          EOMONTH(period_start) as period_end,
+          total_amount,
+          avg_quality_coefficient,
+          0 as errors_count
+        FROM v_salary_by_month
+      `;
+      
+      await this.db.execute(insertQuery);
+      
+      // Получаем количество записей
+      const countResult = await this.db.queryOne('SELECT COUNT(*) as total FROM salary_summary');
+      const total = countResult?.total || 0;
+      
+      this.logger.log(`✅ salary_summary обновлена: ${total} записей`);
+    } catch (error) {
+      this.logger.error('❌ Ошибка обновления salary_summary', error.stack);
+    }
   }
 }
 
