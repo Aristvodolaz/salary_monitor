@@ -59,9 +59,6 @@ export class SapIntegrationService {
     }
 
     this.logger.log('\n✅ Синхронизация завершена');
-    
-    // Обновляем salary_summary после синхронизации
-    await this.updateSalarySummary();
   }
 
   /**
@@ -195,14 +192,8 @@ export class SapIntegrationService {
       // Пока храним время, АЕИ будем вычислять при расчете зарплаты
       const actduraMinutes = parseFloat(item.Actdura || '0');
 
-      // Формируем ФИО из SAP полей
-      const lastName = (item.McName1 || '').trim();        // Фамилия
-      const firstName = (item.McName2 || '').trim();       // Имя Отчество
-      const fullName = `${lastName} ${firstName}`.trim() || `Сотрудник ${item.Employeeid || item.Processor}`;
-
       return {
         employeeId: item.Employeeid || item.Processor,     // ID сотрудника
-        employeeName: fullName,                            // ФИО сотрудника
         warehouseCode: item.Lgnum,                         // Склад
         participantArea: participantArea,                   // Участок (М2, М3, и т.д.)
         operationType: finalOperationType,                 // Тип комплектации
@@ -353,19 +344,17 @@ export class SapIntegrationService {
       );
 
       if (warehouse) {
-        const fio = operation.employeeName || `Сотрудник ${operation.employeeId}`;
-        
         await this.db.execute(
           `INSERT INTO users (employee_id, fio, warehouse_id, role, is_active)
            VALUES (@employeeId, @fio, @warehouseId, 'employee', 1)`,
           {
             employeeId: operation.employeeId,
-            fio: fio,
+            fio: `Сотрудник ${operation.employeeId}`,
             warehouseId: warehouse.id,
           }
         );
 
-        this.logger.log(`✅ Создан новый пользователь: ${operation.employeeId} (${fio})`);
+        this.logger.log(`✅ Создан новый пользователь: ${operation.employeeId}`);
 
         // Повторно получаем пользователя
         user = await this.db.queryOne(
@@ -419,12 +408,15 @@ export class SapIntegrationService {
     // Вычисляем АЕИ по формуле: АЕИ = (Actdura / 60) * Норматив_АЕИ_в_час
     const calculatedAEI = (operation.actdura / 60) * (tariff.norm_aei_per_hour || 0);
     
-    // Рассчитываем базовую сумму БЕЗ Ккач: Сумма = АЕИ * Расценка
-    // Ккач будет применяться на уровне SQL View к сумме за период!
-    const rate = tariff.rate || 0;
-    const amount = calculatedAEI * rate; // БЕЗ коэффициента качества
+    // Округляем АЕИ до целого числа для сохранения в БД
+    const roundedAEI = Math.round(calculatedAEI);
     
-    this.logger.debug(`💰 Расчет: ${operation.actdura.toFixed(2)}мин / 60 * ${tariff.norm_aei_per_hour} = ${calculatedAEI.toFixed(2)} АЕИ * ${rate}₽ = ${amount.toFixed(2)}₽ (без Ккач)`);
+    // Рассчитываем сумму: Сумма = АЕИ_округленное * Расценка
+    // Используем округленное значение для консистентности с отображением
+    const rate = tariff.rate || 0;
+    const amount = roundedAEI * rate;
+    
+    this.logger.debug(`💰 Расчет: ${operation.actdura.toFixed(2)}мин / 60 * ${tariff.norm_aei_per_hour} = ${calculatedAEI.toFixed(2)} ≈ ${roundedAEI} АЕИ * ${rate}₽ = ${amount.toFixed(2)}₽`);
 
     // Проверка существования операции
     const checkQuery = `
@@ -454,7 +446,7 @@ export class SapIntegrationService {
       `;
       await this.db.execute(updateQuery, {
         id: existing.id,
-        count: Math.round(calculatedAEI),  // Вычисленные АЕИ
+        count: roundedAEI,  // Округленные АЕИ
         amount,
         participantArea: operation.participantArea,
         actdura: operation.actdura,
@@ -472,7 +464,7 @@ export class SapIntegrationService {
         warehouseCode,
         operationType: fullOperationType,
         participantArea: operation.participantArea,
-        count: Math.round(calculatedAEI),  // Вычисленные АЕИ
+        count: roundedAEI,  // Округленные АЕИ
         actdura: operation.actdura,
         operationDate: operation.operationDate,
         amount,
@@ -519,49 +511,6 @@ export class SapIntegrationService {
       recordsProcessed,
       errorMessage: errorMessage || null,
     });
-  }
-
-  /**
-   * Обновить salary_summary из v_salary_by_month
-   * Вызывается после каждой синхронизации с SAP
-   */
-  private async updateSalarySummary(): Promise<void> {
-    this.logger.log('📊 Обновление salary_summary...');
-    
-    try {
-      // Удаляем старые данные
-      await this.db.execute('TRUNCATE TABLE salary_summary');
-      
-      // Заполняем из v_salary_by_month
-      const insertQuery = `
-        INSERT INTO salary_summary (
-          user_id,
-          period_start,
-          period_end,
-          total_amount,
-          quality_coefficient,
-          errors_count
-        )
-        SELECT 
-          user_id,
-          period_start,
-          EOMONTH(period_start) as period_end,
-          total_amount,
-          avg_quality_coefficient,
-          0 as errors_count
-        FROM v_salary_by_month
-      `;
-      
-      await this.db.execute(insertQuery);
-      
-      // Получаем количество записей
-      const countResult = await this.db.queryOne('SELECT COUNT(*) as total FROM salary_summary');
-      const total = countResult?.total || 0;
-      
-      this.logger.log(`✅ salary_summary обновлена: ${total} записей`);
-    } catch (error) {
-      this.logger.error('❌ Ошибка обновления salary_summary', error.stack);
-    }
   }
 }
 
