@@ -74,7 +74,7 @@ export class SapIntegrationService {
 
       // Расчет периода (вчерашний день для ежедневной синхронизации)
       const endDate = new Date();
-      endDate.setDate(endDate.getDate() - 4);  // Вчера
+      endDate.setDate(endDate.getDate() - 1);  // Вчера
       endDate.setHours(23, 59, 59, 999);
       
       const startDate = new Date(endDate);
