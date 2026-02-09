@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 // Icons removed - not used in current implementation
 import { salaryAPI, operationsAPI } from '../services/api';
-import { format, subDays, startOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, subMonths } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import SalaryChart from '../components/SalaryChart';
 import OperationsDonutChart from '../components/OperationsDonutChart';
