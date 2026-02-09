@@ -28,7 +28,9 @@ export class SapIntegrationService {
         username: this.configService.get<string>('SAP_USERNAME'),
         password: this.configService.get<string>('SAP_PASSWORD'),
       },
-      timeout: 0, // Без timeout (для больших объемов данных)
+      timeout: 120000, // 2 минуты таймаут (вместо бесконечного ожидания)
+      // Настройки для повторных попыток
+      validateStatus: (status) => status < 500, // Не бросать ошибку на 4xx
     });
   }
 
@@ -72,7 +74,7 @@ export class SapIntegrationService {
 
       // Расчет периода (вчерашний день для ежедневной синхронизации)
       const endDate = new Date();
-      endDate.setDate(endDate.getDate() - 1);  // Вчера
+      endDate.setDate(endDate.getDate() - 4);  // Вчера
       endDate.setHours(23, 59, 59, 999);
       
       const startDate = new Date(endDate);
@@ -86,9 +88,30 @@ export class SapIntegrationService {
       this.logger.log(`📡 SAP запрос: ${fullUrl}`);
       this.logger.log(`📅 Период: ${startDate.toISOString()} - ${endDate.toISOString()}`);
 
-      // Запрос к SAP OData
-      const response = await this.axiosInstance.get(url);
-      this.logger.log(`✅ SAP ответил: ${response.status}`);
+      // Запрос к SAP OData с улучшенной обработкой ошибок
+      let response;
+      try {
+        response = await this.axiosInstance.get(url);
+        this.logger.log(`✅ SAP ответил: ${response.status}`);
+      } catch (error) {
+        if (error.code === 'ETIMEDOUT') {
+          this.logger.error(`⏱️ Таймаут подключения к SAP серверу: ${this.sapBaseUrl}`);
+          this.logger.error(`Проверьте доступность сервера pwm.komus.net с продакшн сервера`);
+          await this.updateSyncLog(syncId, 'error', 0, `Таймаут: SAP сервер недоступен`);
+          throw new Error(`SAP сервер недоступен (ETIMEDOUT). Проверьте сетевое подключение.`);
+        }
+        if (error.code === 'ECONNREFUSED') {
+          this.logger.error(`🚫 SAP сервер отказал в подключении: ${this.sapBaseUrl}`);
+          await this.updateSyncLog(syncId, 'error', 0, `Ошибка: соединение отклонено`);
+          throw new Error(`SAP сервер отказал в подключении (ECONNREFUSED)`);
+        }
+        if (error.response) {
+          this.logger.error(`❌ SAP вернул ошибку ${error.response.status}: ${error.response.statusText}`);
+          await this.updateSyncLog(syncId, 'error', 0, `HTTP ${error.response.status}: ${error.response.statusText}`);
+          throw new Error(`SAP вернул ошибку: ${error.response.status} ${error.response.statusText}`);
+        }
+        throw error;
+      }
       
       const allRecords = this.parseODataResponse(response.data);
       const operations = allRecords.filter(op => op !== null);  // Фильтруем null (служебные)

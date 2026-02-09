@@ -52,7 +52,7 @@ const LoginPage = () => {
             <Box sx={{ textAlign: 'center', mb: { xs: 3, sm: 4 } }}>
               <QrCodeScanner sx={{ fontSize: { xs: 80, sm: 60 }, color: 'primary.main', mb: 2 }} />
               <Typography variant="h4" component="h1" gutterBottom sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' }, fontWeight: 700 }}>
-                SalaryMonitor
+                BalanceMonitor
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ fontSize: { xs: '1rem', sm: '0.875rem' } }}>
                 Войдите, отсканировав штрих-код или введя ШК сотрудника

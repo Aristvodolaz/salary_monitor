@@ -20,6 +20,7 @@ import {
 import { Download, Refresh } from '@mui/icons-material';
 import { adminAPI } from '../services/api';
 import { format, subMonths } from 'date-fns';
+import CurrencyDisplay from '../components/CurrencyDisplay';
 
 const AdminPage = () => {
   const [, setEmployees] = useState<any[]>([]);
@@ -125,7 +126,7 @@ const AdminPage = () => {
                 Сумма выплат
               </Typography>
               <Typography variant="h4">
-                {(stats?.total_amount || 0).toFixed(0)} ₽
+                <CurrencyDisplay amount={stats?.total_amount || 0} decimals={0} variant="large" />
               </Typography>
             </CardContent>
           </Card>
@@ -210,7 +211,7 @@ const AdminPage = () => {
                     <TableCell align="right">{emp.total_aei}</TableCell>
                     <TableCell align="right">
                       <Typography fontWeight="bold" color="primary.main">
-                        {(emp.total_amount || 0).toFixed(2)} ₽
+                        <CurrencyDisplay amount={emp.total_amount || 0} />
                       </Typography>
                     </TableCell>
                   </TableRow>

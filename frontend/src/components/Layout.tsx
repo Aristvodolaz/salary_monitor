@@ -129,7 +129,7 @@ const Layout = () => {
             <MenuIcon sx={{ fontSize: { xs: 28, sm: 24 } }} />
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontSize: { xs: '1.25rem', sm: '1.25rem' }, fontWeight: 600 }}>
-            SalaryMonitor
+            BalanceMonitor
           </Typography>
         </Toolbar>
       </AppBar>

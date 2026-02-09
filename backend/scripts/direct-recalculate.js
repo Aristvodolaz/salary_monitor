@@ -1,90 +1,100 @@
+// Прямой пересчет amount через SQL запрос
 const sql = require('mssql');
+require('dotenv').config();
 
 const config = {
-  user: 'sa',
-  password: 'icY2eGuyfU',
-  server: 'PRM-SRV-MSSQL-01.komus.net',
-  port: 59587,
-  database: 'SalaryMonitor',
+  server: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT || '1433'),
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   options: {
     encrypt: false,
-    trustServerCertificate: true
+    trustServerCertificate: true,
+    enableArithAbort: true,
+    connectionTimeout: 30000,
+    requestTimeout: 30000
   }
 };
 
-async function main() {
+async function recalculate() {
+  let pool;
   try {
-    console.log('🔄 Подключение к БД...');
-    await sql.connect(config);
-    console.log('✅ Подключено\n');
-
-    console.log('🔄 Пересчет сумм operations...\n');
-
-    const updateQuery = `
+    console.log('🔧 Подключение к БД...');
+    console.log(`   Сервер: ${config.server}:${config.port}`);
+    console.log(`   База: ${config.database}`);
+    console.log(`   Пользователь: ${config.user}`);
+    console.log('');
+    
+    pool = await sql.connect(config);
+    console.log('✅ Подключено!\n');
+    
+    // Пересчет amount
+    console.log('📝 Выполняем пересчет amount = count × rate...');
+    const result = await pool.request().query(`
       UPDATE o
-      SET o.amount = o.count * t.rate,
-          o.updated_at = GETDATE()
+      SET o.amount = o.count * t.rate
       FROM operations o
-      INNER JOIN tariffs t ON 
+      LEFT JOIN tariffs t ON 
           (o.warehouse_code = t.warehouse_code OR t.warehouse_code = 'ALL')
           AND o.operation_type = t.operation_type
           AND o.operation_date >= t.valid_from
           AND (t.valid_to IS NULL OR o.operation_date <= t.valid_to)
           AND t.is_active = 1
-    `;
-
-    const result = await sql.query(updateQuery);
-    console.log(`✅ Обновлено строк: ${result.rowsAffected[0]}\n`);
-
-    // Проверка
-    console.log('📊 Проверка результата:\n');
-    const check = await sql.query`
-      SELECT TOP 5
-        o.id,
-        u.fio,
-        o.warehouse_code,
-        o.participant_area,
-        o.operation_type,
-        o.count AS aei_count,
-        t.rate,
-        o.amount,
-        (o.count * t.rate) AS expected,
-        CASE 
-          WHEN ABS(o.amount - (o.count * t.rate)) < 0.01 THEN 'OK ✅'
-          ELSE 'ERROR ❌'
-        END AS status
-      FROM operations o
-      INNER JOIN users u ON o.user_id = u.id
-      LEFT JOIN tariffs t ON 
-        (o.warehouse_code = t.warehouse_code OR t.warehouse_code = 'ALL')
-        AND o.operation_type = t.operation_type
-        AND o.operation_date >= t.valid_from
-        AND (t.valid_to IS NULL OR o.operation_date <= t.valid_to)
-        AND t.is_active = 1
-      WHERE o.operation_type LIKE '%Упаковка%'
-      ORDER BY o.operation_date DESC
-    `;
-
-    console.table(check.recordset.map(r => ({
-      ID: r.id,
-      ФИО: r.fio?.substring(0, 15),
-      Участок: r.participant_area,
-      Тип: r.operation_type?.substring(0, 15),
-      АЕИ: r.aei_count?.toFixed(2),
-      'Расц.': r.rate?.toFixed(2),
-      'Сумма': r.amount?.toFixed(2),
-      'Ожид.': r.expected?.toFixed(2),
-      'OK?': r.status
-    })));
-
-    console.log('\n✅ Пересчет завершен!');
-    console.log('📋 Формула: amount = count × rate (БЕЗ Ккач)\n');
+      WHERE t.rate IS NOT NULL;
+    `);
     
-    await sql.close();
+    console.log(`✅ Обновлено записей: ${result.rowsAffected[0]}\n`);
+    
+    // Проверка
+    console.log('📊 Проверка результата (операции за 29.01.2026):\n');
+    const check = await pool.request().query(`
+      SELECT TOP 15
+          CONVERT(VARCHAR, o.operation_date, 20) AS operation_date,
+          o.operation_type,
+          o.count AS aei_count,
+          t.rate,
+          o.amount AS calculated_amount
+      FROM operations o
+      LEFT JOIN tariffs t ON 
+          (o.warehouse_code = t.warehouse_code OR t.warehouse_code = 'ALL')
+          AND o.operation_type = t.operation_type
+          AND o.operation_date >= t.valid_from
+          AND (t.valid_to IS NULL OR o.operation_date <= t.valid_to)
+          AND t.is_active = 1
+      WHERE o.operation_date >= '2026-01-29'
+        AND o.operation_type LIKE '%Упаковка%'
+      ORDER BY o.operation_date DESC
+    `);
+    
+    check.recordset.forEach(row => {
+      const expected = row.aei_count * row.rate;
+      const isCorrect = Math.abs(row.calculated_amount - expected) < 0.01;
+      const status = isCorrect ? '✅' : '❌';
+      
+      console.log(`${status} ${row.operation_date}`);
+      console.log(`   ${row.operation_type}`);
+      console.log(`   ${row.aei_count} АЕИ × ${row.rate.toFixed(2)} ₽ = ${row.calculated_amount.toFixed(2)} ₽`);
+      console.log(`   Ожидалось: ${expected.toFixed(2)} ₽\n`);
+    });
+    
+    console.log('✅ Пересчет завершен успешно!');
+    
   } catch (err) {
     console.error('❌ Ошибка:', err.message);
+    if (err.code === 'ELOGIN') {
+      console.error('\n💡 Проблема с авторизацией!');
+      console.error('   Проверьте DB_USER и DB_PASSWORD в .env файле');
+    } else if (err.code === 'ESOCKET') {
+      console.error('\n💡 Не удалось подключиться к серверу!');
+      console.error('   Проверьте DB_HOST и DB_PORT в .env файле');
+    }
     process.exit(1);
+  } finally {
+    if (pool) {
+      await pool.close();
+    }
   }
 }
 
-main();
+recalculate();

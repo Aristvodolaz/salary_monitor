@@ -20,6 +20,7 @@ import {
 import { Search } from '@mui/icons-material';
 import { operationsAPI } from '../services/api';
 import { format } from 'date-fns';
+import CurrencyDisplay from '../components/CurrencyDisplay';
 
 const OperationsPage = () => {
   const [operations, setOperations] = useState<any[]>([]);
@@ -134,10 +135,10 @@ const OperationsPage = () => {
                   </TableCell>
                   <TableCell>{op.operation_type}</TableCell>
                   <TableCell align="right">{op.aei_count}</TableCell>
-                  <TableCell align="right">{(op.rate || 0).toFixed(2)} ₽</TableCell>
+                  <TableCell align="right"><CurrencyDisplay amount={op.rate || 0} /></TableCell>
                   <TableCell align="right">
                     <Typography fontWeight="bold" color="primary.main">
-                      {(op.base_amount || 0).toFixed(2)} ₽
+                      <CurrencyDisplay amount={op.base_amount || 0} />
                     </Typography>
                   </TableCell>
                 </TableRow>

@@ -1,4 +1,4 @@
-import { Card, CardContent, Typography, Box, useTheme, Fade, Grow } from '@mui/material';
+import { Card, CardContent, Typography, Box, useTheme, Fade, Grow, Tooltip as MuiTooltip } from '@mui/material';
 import {
   Area,
   XAxis,
@@ -10,7 +10,8 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { TrendingUp, TrendingDown } from '@mui/icons-material';
+import { TrendingUp, TrendingDown, InfoOutlined } from '@mui/icons-material';
+import CurrencyDisplay from './CurrencyDisplay';
 
 interface SalaryChartProps {
   data: Array<{
@@ -66,8 +67,8 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
           <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
             {payload[0].payload.fullDate}
           </Typography>
-          <Typography variant="body2" sx={{ color: theme.palette.primary.main }}>
-            💰 Заработок: {payload[0].value.toLocaleString('ru-RU')} ₽
+          <Typography variant="body2" sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            Заработок: <CurrencyDisplay amount={payload[0].value} />
           </Typography>
           {payload[0].payload.operations > 0 && (
             <Typography variant="body2" color="text.secondary">
@@ -97,24 +98,31 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
             
             {/* Индикатор тренда */}
             {chartData.length >= 2 && (
-              <Box
-                sx={{
-                  display: { xs: 'none', sm: 'flex' },
-                  alignItems: 'center',
-                  gap: 0.5,
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: trend.isPositive ? 'success.main' : 'error.main',
-                  color: trend.isPositive ? 'success.main' : 'error.main',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
-                }}
+              <MuiTooltip 
+                title="Изменение среднего заработка за последнюю неделю по сравнению с предыдущей неделей"
+                arrow
               >
-                {trend.isPositive ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
-                {trend.value}%
-              </Box>
+                <Box
+                  sx={{
+                    display: { xs: 'none', sm: 'flex' },
+                    alignItems: 'center',
+                    gap: 0.5,
+                    px: 1.5,
+                    py: 0.5,
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: trend.isPositive ? 'success.main' : 'error.main',
+                    color: trend.isPositive ? 'success.main' : 'error.main',
+                    fontWeight: 600,
+                    fontSize: '0.875rem',
+                    cursor: 'help',
+                  }}
+                >
+                  {trend.isPositive ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
+                  {trend.value}%
+                  <InfoOutlined sx={{ fontSize: '1rem', ml: 0.3, opacity: 0.7 }} />
+                </Box>
+              </MuiTooltip>
             )}
           </Box>
 
@@ -155,7 +163,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                       stroke={theme.palette.divider}
                       tickFormatter={(value) => `${value.toLocaleString('ru-RU')}`}
                       label={{ 
-                        value: '₽', 
+                        value: 'K', 
                         angle: 0, 
                         position: 'top',
                         offset: 10,
@@ -208,7 +216,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                 Максимум
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 600, color: '#E31E24', fontSize: { xs: '1rem', md: '1.25rem' } }}>
-                {Math.max(...chartData.map(d => d.amount)).toLocaleString('ru-RU')} ₽
+                <CurrencyDisplay amount={Math.max(...chartData.map(d => d.amount))} />
               </Typography>
             </Box>
             
@@ -217,7 +225,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                 Средний
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 600, fontSize: { xs: '1rem', md: '1.25rem' } }}>
-                {(chartData.reduce((sum, d) => sum + d.amount, 0) / chartData.length).toFixed(2)} ₽
+                <CurrencyDisplay amount={chartData.reduce((sum, d) => sum + d.amount, 0) / chartData.length} />
               </Typography>
             </Box>
             

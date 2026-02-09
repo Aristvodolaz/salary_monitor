@@ -1,5 +1,6 @@
 import { Card, CardContent, Typography, Box, useTheme, Grow } from '@mui/material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import CurrencyDisplay from './CurrencyDisplay';
 
 interface OperationsDonutChartProps {
   data: Array<{
@@ -8,6 +9,7 @@ interface OperationsDonutChartProps {
     operations_count: number;
     total_aei: number;
   }>;
+  period?: string;
 }
 
 const COLORS = [
@@ -21,7 +23,7 @@ const COLORS = [
   '#D32F2F',  // Глубокий красный
 ];
 
-const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({ data }) => {
+const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({ data, period = 'текущий месяц' }) => {
   const theme = useTheme();
 
   const chartData = data
@@ -54,8 +56,8 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({ data }) => 
           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: data.color }}>
             {data.name}
           </Typography>
-          <Typography variant="body2" sx={{ mb: 0.5 }}>
-            💰 {data.value.toLocaleString('ru-RU')} ₽ ({percentage}%)
+          <Typography variant="body2" sx={{ mb: 0.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <CurrencyDisplay amount={data.value} /> ({percentage}%)
           </Typography>
           <Typography variant="body2" color="text.secondary">
             📋 Операций: {data.operations} | АЕИ: {data.aei}
@@ -98,9 +100,14 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({ data }) => 
         }}
       >
         <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, fontSize: { xs: '1.125rem', md: '1.25rem' } }}>
-            Распределение по типам операций
-          </Typography>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, fontSize: { xs: '1.125rem', md: '1.25rem' } }}>
+              Расценки за операции
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.875rem', md: '0.75rem' } }}>
+              Период: {period}
+            </Typography>
+          </Box>
 
           {chartData.length > 0 ? (
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'stretch', md: 'center' }, gap: 3 }}>
@@ -177,7 +184,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({ data }) => 
                       </Box>
                     </Box>
                     <Typography variant="body1" sx={{ fontWeight: 600, fontSize: { xs: '1.125rem', md: '1rem' }, whiteSpace: 'nowrap' }}>
-                      {item.value.toLocaleString('ru-RU')} ₽
+                      <CurrencyDisplay amount={item.value} />
                     </Typography>
                   </Box>
                 ))}
