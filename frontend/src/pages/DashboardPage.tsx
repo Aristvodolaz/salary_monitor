@@ -21,7 +21,6 @@ const DashboardPage = () => {
   const [yesterdayData, setYesterdayData] = useState<any>(null);
   const [currentMonthData, setCurrentMonthData] = useState<any>(null);
   const [previousMonthData, setPreviousMonthData] = useState<any>(null);
-  const [stats, setStats] = useState<any>(null);
   const [operationsByType, setOperationsByType] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,11 +44,10 @@ const DashboardPage = () => {
       const prevMonthEnd = format(new Date(new Date().getFullYear(), new Date().getMonth(), 0), 'yyyy-MM-dd');
 
       // Fetch all data in parallel
-      const [yesterdayRes, currentMonthRes, prevMonthRes, statsRes, opsRes, chartDataRes] = await Promise.all([
+      const [yesterdayRes, currentMonthRes, prevMonthRes, opsRes, chartDataRes] = await Promise.all([
         salaryAPI.getSalary('yesterday'),
         salaryAPI.getSalary('month'),
         salaryAPI.getSalary('custom', prevMonthStart, prevMonthEnd),
-        salaryAPI.getStats(),
         operationsAPI.getOperationsByType(
           format(startOfMonth(new Date()), 'yyyy-MM-dd'),
           format(new Date(), 'yyyy-MM-dd')
@@ -61,7 +59,6 @@ const DashboardPage = () => {
       setYesterdayData(yesterdayRes.data);
       setCurrentMonthData(currentMonthRes.data);
       setPreviousMonthData(prevMonthRes.data.summary || prevMonthRes.data);
-      setStats(statsRes.data);
       setOperationsByType(opsRes.data);
       setChartData(chartDataRes.data.daily_breakdown || []);
     } catch (err: any) {
@@ -228,83 +225,6 @@ const DashboardPage = () => {
                     {previousMonthData?.total_aei || 0}
                   </Typography>
                 </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Статистика за все время */}
-        <Grid item xs={12} sm={6} md={6}>
-          <Card 
-            sx={{ 
-              height: '100%',
-              border: '1px solid',
-              borderColor: 'divider',
-              boxShadow: 'none',
-            }}
-          >
-            <CardContent sx={{ p: { xs: 3, md: 2 } }}>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 1, fontSize: { xs: '1rem', md: '0.875rem' } }}>
-                За все время
-              </Typography>
-              <Typography 
-                variant="h4" 
-                sx={{ 
-                  fontWeight: 700,
-                  color: 'text.primary',
-                  mb: 2,
-                  fontSize: { xs: '1.75rem', md: '2.125rem' }
-                }}
-              >
-                <CurrencyDisplay amount={stats?.total_earned || 0} variant="large" />
-              </Typography>
-              <Box sx={{ display: 'flex', gap: { xs: 4, md: 3 } }}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.875rem', md: '0.75rem' } }}>Дней</Typography>
-                  <Typography variant="h6" fontWeight="600" sx={{ fontSize: { xs: '1.25rem', md: '1rem' } }}>{stats?.total_work_days || 0}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.875rem', md: '0.75rem' } }}>Операций</Typography>
-                  <Typography variant="h6" fontWeight="600" sx={{ fontSize: { xs: '1.25rem', md: '1rem' } }}>{stats?.total_operations || 0}</Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Последняя операция */}
-        <Grid item xs={12} sm={6} md={6}>
-          <Card 
-            sx={{ 
-              height: '100%',
-              border: '1px solid',
-              borderColor: 'divider',
-              boxShadow: 'none',
-            }}
-          >
-            <CardContent sx={{ p: { xs: 3, md: 2 } }}>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 1, fontSize: { xs: '1rem', md: '0.875rem' } }}>
-                Последняя операция
-              </Typography>
-              <Typography 
-                variant="h6" 
-                sx={{ 
-                  fontWeight: 600,
-                  color: 'text.primary',
-                  mb: 2,
-                  fontSize: { xs: '1.125rem', md: '1rem' },
-                  lineHeight: 1.4
-                }}
-              >
-                {stats?.last_operation_date
-                  ? format(new Date(stats.last_operation_date), 'dd MMMM yyyy', { locale: ru })
-                  : 'Нет данных'}
-              </Typography>
-              <Box>
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.875rem', md: '0.75rem' } }}>Среднее за операцию</Typography>
-                <Typography variant="h6" fontWeight="600" sx={{ fontSize: { xs: '1.25rem', md: '1rem' } }}>
-                  <CurrencyDisplay amount={stats?.avg_per_operation || 0} />
-                </Typography>
               </Box>
             </CardContent>
           </Card>
