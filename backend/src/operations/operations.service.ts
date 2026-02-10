@@ -90,32 +90,37 @@ export class OperationsService {
 
   /**
    * Получить группированные операции по типам за период
+   * Использует данные из v_salary_by_day для учета коэффициента качества
    */
   async getOperationsByType(userId: number, startDate?: string, endDate?: string) {
     let query = `
       SELECT 
-        operation_type,
-        COUNT(*) as operations_count,
-        SUM(aei_count) as total_aei,
-        SUM(base_amount) as total_amount,
-        AVG(base_amount) as avg_amount
-      FROM v_salary_details
-      WHERE user_id = @userId
+        sd.operation_type,
+        COUNT(DISTINCT sd.operation_id) as operations_count,
+        SUM(sd.aei_count) as total_aei,
+        SUM(sd.base_amount) as base_amount,
+        SUM(sd.base_amount * COALESCE(sbd.quality_coefficient, 1.0)) as total_amount,
+        AVG(sd.base_amount) as avg_amount
+      FROM v_salary_details sd
+      LEFT JOIN v_salary_by_day sbd ON 
+        sd.user_id = sbd.user_id 
+        AND CAST(sd.operation_date AS DATE) = sbd.date
+      WHERE sd.user_id = @userId
     `;
 
     const params: any = { userId };
 
     if (startDate) {
-      query += ' AND operation_date >= @startDate';
+      query += ' AND sd.operation_date >= @startDate';
       params.startDate = startDate;
     }
 
     if (endDate) {
-      query += ' AND operation_date <= @endDate';
+      query += ' AND sd.operation_date <= @endDate';
       params.endDate = endDate;
     }
 
-    query += ' GROUP BY operation_type ORDER BY total_amount DESC';
+    query += ' GROUP BY sd.operation_type ORDER BY total_amount DESC';
 
     return this.db.query(query, params);
   }
