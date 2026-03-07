@@ -19,8 +19,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       database: this.configService.get<string>('DB_NAME'),
       user: this.configService.get<string>('DB_USER'),
       password: this.configService.get<string>('DB_PASSWORD'),
+      connectionTimeout: 60000,  // 60 сек — меньше таймаутов при долгой синхронизации
+      requestTimeout: 60000,     // 60 сек на запрос
       options: {
-        encrypt: false, // для локального SQL Server
+        encrypt: false,
         trustServerCertificate: true,
         enableArithAbort: true,
       },

@@ -35,7 +35,7 @@ export class SapIntegrationService {
   }
 
   /**
-   * Синхронизация данных из SAP для всех складов
+   * Синхронизация данных из SAP для всех складов (ежедневная загрузка за вчера)
    */
   async syncAllWarehouses(): Promise<void> {
     this.logger.log('🔄 Начало синхронизации данных из SAP для всех складов');
@@ -69,89 +69,114 @@ export class SapIntegrationService {
   async syncWarehouse(warehouseCode: string): Promise<void> {
     const syncId = await this.createSyncLog(warehouseCode);
 
+    let totalProcessed = 0;
     try {
       this.logger.log(`📦 Синхронизация склада: ${warehouseCode}`);
 
-      // Расчет периода (вчерашний день для ежедневной синхронизации)
+      // Ежедневная синхронизация: вчерашний день (00:00:00 — 23:59:59 UTC)
       const endDate = new Date();
-      endDate.setDate(endDate.getDate() - 1);  // Вчера
-      endDate.setHours(23, 59, 59, 999);
-      
+      endDate.setUTCDate(endDate.getUTCDate() - 1);
+      endDate.setUTCHours(23, 59, 59, 999);
       const startDate = new Date(endDate);
-      startDate.setHours(0, 0, 0, 0);  // Начало вчерашнего дня
+      startDate.setUTCHours(0, 0, 0, 0);
 
-      // Формирование OData запроса
+      this.logger.log(`📅 Период: ${startDate.toISOString().slice(0, 10)}`);
+
+      // Удаляем операции за вчера по складу перед загрузкой (перезапись при повторном синке)
+      await this.deleteOperationsForPeriod(warehouseCode, startDate, endDate);
+
+      // Формирование OData запроса (json — явный формат ответа SAP)
       const filter = this.buildODataFilter(warehouseCode, startDate, endDate);
-      const url = `/WHOSet?${filter}`;
+      const url = `/WHOSet?${filter}&$format=json`;
 
-      const fullUrl = `${this.sapBaseUrl}${url}`;
-      this.logger.log(`📡 SAP запрос: ${fullUrl}`);
-      this.logger.log(`📅 Период: ${startDate.toISOString()} - ${endDate.toISOString()}`);
-
-      // Запрос к SAP OData с улучшенной обработкой ошибок
+      const isRetryable = (e: any) =>
+        e?.code === 'ECONNRESET' ||
+        e?.code === 'ETIMEDOUT' ||
+        e?.message === 'aborted' ||
+        (e?.message && String(e.message).toLowerCase().includes('aborted'));
+      const maxAttempts = 3;
       let response;
-      try {
-        response = await this.axiosInstance.get(url);
-        this.logger.log(`✅ SAP ответил: ${response.status}`);
-      } catch (error) {
-        if (error.code === 'ETIMEDOUT') {
-          this.logger.error(`⏱️ Таймаут подключения к SAP серверу: ${this.sapBaseUrl}`);
-          this.logger.error(`Проверьте доступность сервера pwm.komus.net с продакшн сервера`);
-          await this.updateSyncLog(syncId, 'error', 0, `Таймаут: SAP сервер недоступен`);
-          throw new Error(`SAP сервер недоступен (ETIMEDOUT). Проверьте сетевое подключение.`);
+      let lastError: any;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          response = await this.axiosInstance.get(url, { timeout: 180000 });
+          this.logger.log(`✅ SAP ответил: ${response.status}`);
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < maxAttempts && isRetryable(error)) {
+            this.logger.warn(`⚠️ ${error.message || error.code}, повтор ${attempt}/${maxAttempts} через 3 сек...`);
+            await new Promise((r) => setTimeout(r, 3000));
+            continue;
+          }
+          if (error.code === 'ETIMEDOUT') {
+            this.logger.error(`⏱️ Таймаут подключения к SAP серверу: ${this.sapBaseUrl}`);
+            await this.updateSyncLog(syncId, 'failed', totalProcessed, `Таймаут: SAP сервер недоступен`);
+            throw new Error(`SAP сервер недоступен (ETIMEDOUT). Проверьте сетевое подключение.`);
+          }
+          if (error.code === 'ECONNREFUSED') {
+            this.logger.error(`🚫 SAP сервер отказал в подключении: ${this.sapBaseUrl}`);
+            await this.updateSyncLog(syncId, 'failed', totalProcessed, `Ошибка: соединение отклонено`);
+            throw new Error(`SAP сервер отказал в подключении (ECONNREFUSED)`);
+          }
+          if (error.response) {
+            this.logger.error(`❌ SAP вернул ошибку ${error.response.status}: ${error.response.statusText}`);
+            await this.updateSyncLog(syncId, 'failed', totalProcessed, `HTTP ${error.response.status}: ${error.response.statusText}`);
+            throw new Error(`SAP вернул ошибку: ${error.response.status} ${error.response.statusText}`);
+          }
+          throw error;
         }
-        if (error.code === 'ECONNREFUSED') {
-          this.logger.error(`🚫 SAP сервер отказал в подключении: ${this.sapBaseUrl}`);
-          await this.updateSyncLog(syncId, 'error', 0, `Ошибка: соединение отклонено`);
-          throw new Error(`SAP сервер отказал в подключении (ECONNREFUSED)`);
-        }
-        if (error.response) {
-          this.logger.error(`❌ SAP вернул ошибку ${error.response.status}: ${error.response.statusText}`);
-          await this.updateSyncLog(syncId, 'error', 0, `HTTP ${error.response.status}: ${error.response.statusText}`);
-          throw new Error(`SAP вернул ошибку: ${error.response.status} ${error.response.statusText}`);
-        }
-        throw error;
       }
-      
+      if (lastError && !response) {
+        this.logger.error(`❌ Исчерпаны попытки, последняя ошибка: ${lastError.message || lastError.code}`);
+        await this.updateSyncLog(syncId, 'failed', totalProcessed, lastError.message || String(lastError));
+        throw lastError;
+      }
+
       const allRecords = this.parseODataResponse(response.data);
-      const operations = allRecords.filter(op => op !== null);  // Фильтруем null (служебные)
+      const operations = allRecords.filter(op => op !== null);
+      const skippedNoAei = allRecords.length - operations.length;
+      this.logger.log(`Получено записей: ${allRecords.length}, операций: ${operations.length}`);
 
-      this.logger.log(`Получено записей: ${allRecords.length}, операций комплектации: ${operations.length}`);
-
-      // Сохранение в БД (только операции с АЕИ > 0)
-      let processedCount = 0;
-      let skippedNoAei = 0;
       let skippedNoType = 0;
-      
       for (const operation of operations) {
-        if (!operation.actdura || operation.actdura <= 0) {
-          skippedNoAei++;
-          continue;  // Пропускаем операции без времени
-        }
-        
         const saved = await this.saveOperation(operation, warehouseCode);
-        if (saved) {
-          processedCount++;
-        } else {
-          skippedNoType++;
-        }
+        if (saved) totalProcessed++;
+        else skippedNoType++;
       }
-      
-      this.logger.log(`📊 Статистика обработки:`);
-      this.logger.log(`   ✅ Сохранено: ${processedCount}`);
-      this.logger.log(`   ⏭️  Пропущено (нет АЕИ): ${skippedNoAei}`);
-      this.logger.log(`   ⏭️  Пропущено (нет типа/тарифа): ${skippedNoType}`);
 
-      // Обновление лога синхронизации
-      await this.updateSyncLog(syncId, 'success', processedCount);
-
-      this.logger.log(`✅ Склад ${warehouseCode}: обработано ${processedCount} операций`);
+      this.logger.log(`📊 Статистика: сохранено ${totalProcessed}, пропущено (нет АЕИ/типа): ${skippedNoAei + skippedNoType}`);
+      await this.updateSyncLog(syncId, 'success', totalProcessed);
+      this.logger.log(`✅ Склад ${warehouseCode}: обработано ${totalProcessed} операций`);
     } catch (error) {
       const errorMessage = error.response?.data || error.message;
       this.logger.error(`❌ Детали ошибки SAP: ${JSON.stringify(errorMessage)}`);
-      await this.updateSyncLog(syncId, 'failed', 0, JSON.stringify(errorMessage));
+      await this.updateSyncLog(syncId, 'failed', totalProcessed, JSON.stringify(errorMessage));
       throw error;
     }
+  }
+
+  /**
+   * Разбивает период на окна по N дней (UTC), чтобы границы в логах и OData совпадали с календарём
+   */
+  private getDateChunks(
+    periodStart: Date,
+    periodEnd: Date,
+    chunkDays: number,
+  ): { startDate: Date; endDate: Date }[] {
+    const chunks: { startDate: Date; endDate: Date }[] = [];
+    let start = new Date(periodStart.getTime());
+    while (start <= periodEnd) {
+      const end = new Date(start.getTime());
+      end.setUTCDate(end.getUTCDate() + chunkDays - 1);
+      end.setUTCHours(23, 59, 59, 999);
+      if (end > periodEnd) end.setTime(periodEnd.getTime());
+      chunks.push({ startDate: new Date(start.getTime()), endDate: new Date(end.getTime()) });
+      start.setUTCDate(start.getUTCDate() + chunkDays);
+      start.setUTCHours(0, 0, 0, 0);
+    }
+    return chunks;
   }
 
   /**
@@ -184,167 +209,152 @@ export class SapIntegrationService {
         }
       }
 
-      // Маппинг участка из Wcr (правило создания заказа)
-      const participantArea = this.mapWcrToArea(item.Wcr);
+      // Маппинг полного типа операции из WCR (Участок + Тип)
+      const finalOperationType = this.mapWcrToFullOperationType(item.Wcr);
       
-      // Пропускаем если Wcr не найден в маппинге (служебная операция)
-      if (!participantArea || participantArea === 'Неизвестно') {
-        return null;  // Игнорируем операции с неизвестным Wcr
+      // Пропускаем если WCR не найден в маппинге (служебные операции)
+      if (!finalOperationType) {
+        return null;
       }
+
+      // Получаем АЕИ из поля ZsumAmountItm
+      const aeiCount = parseFloat(item.ZsumAmountItm || '0');
       
-      // Пропускаем служебные операции по Queue
-      const queueUpper = (item.Queue || '').toUpperCase();
-      if (queueUpper && (
-        queueUpper.startsWith('OUT_') ||   // Отгрузка
-        queueUpper.startsWith('REPLO_') || // Пополнение
-        queueUpper.startsWith('REPL_') ||  // Пополнение  
-        queueUpper.startsWith('INT_') ||   // Внутренние
-        queueUpper.startsWith('INV_') ||   // Инвентаризация
-        queueUpper.includes('BRAK')        // Брак
-      )) {
+      // Пропускаем записи где АЕИ = 0 (записываем только где больше 0)
+      if (aeiCount <= 0) {
         return null;
       }
       
-      // Маппинг типа комплектации из Queue
-      const operationType = this.mapQueueToOperationType(item.Queue);
-      
-      // Если тип не определен, используем Queue как есть для отладки
-      const finalOperationType = operationType || item.Queue || 'Неизвестно';
-
-      // Вычисляем АЕИ на основе фактического времени (Actdura в минутах)
-      // Пока храним время, АЕИ будем вычислять при расчете зарплаты
+      // Фактическое время в минутах (для справки)
       const actduraMinutes = parseFloat(item.Actdura || '0');
+      // Участок — первое слово полного типа (ФС, ДО, МС, М2, М3, М4, М5, ПМ) для отчётов и расчётов
+      const participantArea = (finalOperationType && finalOperationType.split(' ')[0]) || null;
 
       return {
         employeeId: item.Employeeid || item.Processor,     // ID сотрудника
+        employeeName1: (item.McName1 || '').trim(),        // Фамилия
+        employeeName2: (item.McName2 || '').trim(),        // Имя
         warehouseCode: item.Lgnum,                         // Склад
-        participantArea: participantArea,                   // Участок (М2, М3, и т.д.)
-        operationType: finalOperationType,                 // Тип комплектации
+        operationType: finalOperationType,                 // Полный тип: "Участок Тип"
+        participantArea,                                    // Участок для participant_area в БД
         actdura: actduraMinutes,                           // Фактическое время (минуты)
-        count: 0,                                          // АЕИ вычислим при расчете зарплаты
+        count: aeiCount,                                   // АЕИ из SAP (ZsumAmountItm)
         operationDate: operationDate,                      // Дата подтверждения
         sapOrderId: item.Who || null,                      // ID заказа
         wcr: item.Wcr,                                     // Сохраняем для отладки
         queue: item.Queue,                                 // Сохраняем для отладки
       };
-    });
+    }).filter((item: any) => item !== null); // Фильтруем null (записи без АЕИ или неизвестного типа)
   }
 
   /**
-   * Маппинг Wcr (правило) → Участок
-   * Полный маппинг из таблицы КОМУС (обновлено 2026-01-22)
+   * Маппинг WCR → Полный тип операции (Участок + Тип)
+   * Возвращает null для неизвестных/служебных кодов
    */
-  private mapWcrToArea(wcr: string): string | null {
+  private mapWcrToFullOperationType(wcr: string): string | null {
     if (!wcr) return null;
     
     const mapping: { [key: string]: string } = {
-      // ФС - Фирменная сеть (желтая группа)
-      'PCST': 'ФС', 'PST2': 'ФС', 'PSTT': 'ФС', 'PST1': 'ФС', 'PST3': 'ФС', 'PZST': 'ФС', 'PSST': 'ФС',
-      'PCM1': 'ФС', 'PM12': 'ФС', 'PM11': 'ФС', 'PM13': 'ФС', 'PS1L': 'ФС', 'PS1S': 'ФС', 'PS1M': 'ФС', 'PSM1': 'ФС',
-      'PCCD': 'ФС', 'PCD2': 'ФС', 'PCD1': 'ФС', 'PZCD': 'ФС', 'PSCD': 'ФС',
+      // ФС Коробочная комплектация (желтый)
+      'PCST': 'ФС Коробочная комплектация',
+      'PST2': 'ФС Коробочная комплектация',
+      'PST1': 'ФС Коробочная комплектация',
+      'PST3': 'ФС Коробочная комплектация',
+      'PSST': 'ФС Коробочная комплектация',
       
-      // ДО - Доставка офис (зеленая группа)
-      'PDO2': 'ДО', 'PDO1': 'ДО', 'PDO3': 'ДО',
+      // ФС Штучная комплектация (желтый)
+      'PM12': 'ФС Штучная комплектация',
+      'PM13': 'ФС Штучная комплектация',
+      'PS1S': 'ФС Штучная комплектация',
+      'PS01': 'ФС Штучная комплектация',
       
-      // МС - Монослой (оранжевая группа)
-      'PCMC': 'МС', 'PMC2': 'МС', 'PMC1': 'МС', 'PPMC': 'МС',
-      'P2MC': 'МС', 'PKMC': 'МС', 'PSC1': 'МС', 'PSCS': 'МС',
-      'PSCM': 'МС', 'P2XC': 'МС', 'PSMC': 'МС',
+      // ДО Коробочная комплектация (зеленый)
+      'PCD1': 'ДО Коробочная комплектация',
+      'PSCD': 'ДО Коробочная комплектация',
       
-      // М2 - Участок 2 (голубая группа)
-      'PCM2': 'М2', 'PM22': 'М2', 'PM21': 'М2', 'P2M2': 'М2',
-      'PSM2': 'М2', 'PKM2': 'М2', 'PPM2': 'М2',
-      'PS2L': 'М2', 'PS2S': 'М2', 'PZM2': 'М2', 'PS2M': 'М2',
+      // ДО Штучная комплектация (зеленый)
+      'PDO1': 'ДО Штучная комплектация',
+      'PDO3': 'ДО Штучная комплектация',
       
-      // М3 - Участок 3 (фиолетовая группа)
-      'PCM3': 'М3', 'PM32': 'М3', 'PM31': 'М3', 'PS3L': 'М3',
-      'P2M3': 'М3', 'PSM3': 'М3', 'PS3S': 'М3', 'PKM3': 'М3', 
-      'PS3M': 'М3', 'PPM3': 'М3',
+      // МС Коробочная комплектация (оранжевый)
+      'PCMC': 'МС Коробочная комплектация',
+      'PMC1': 'МС Коробочная комплектация',
+      'PMC2': 'МС Коробочная комплектация',
+      'PPMC': 'МС Коробочная комплектация',
       
-      // М4 - Участок 4 (серая группа)
-      'PCM4': 'М4', 'PM42': 'М4', 'PM44': 'М4', 'PM41': 'М4',
-      'PPM4': 'М4', 'P2M4': 'М4', 'PSM4': 'М4', 'PS4L': 'М4', 
-      'PS4S': 'М4', 'PS4M': 'М4', 'PZM4': 'М4', 'PKM4': 'М4',
+      // МС Штучная комплектация (оранжевый)
+      'PS5S': 'МС Штучная комплектация',
+      'PSC9': 'МС Штучная комплектация',
       
-      // М5 - Участок 5 (светло-зеленая группа)
-      'PCM5': 'М5', 'PM52': 'М5', 'PM51': 'М5', 'PPMS': 'М5',
-      'PS5L': 'М5', 'PS5S': 'М5', 'PS5M': 'М5', 'P2M5': 'М5',
-      'PZM5': 'М5', 'PKM5': 'М5',
+      // МС Упаковка (оранжевый)
+      'PAMC': 'МС Упаковка',
       
-      // ПМ - Паллетный метод (желтая внизу)
-      'DEF': 'ПМ',
+      // М2 Коробочная комплектация (серый)
+      'PCM2': 'М2 Коробочная комплектация',
+      'PM22': 'М2 Коробочная комплектация',
+      
+      // М2 Штучная комплектация (серый)
+      'PS2L': 'М2 Штучная комплектация',
+      'PM2Z': 'М2 Штучная комплектация',
+      
+      // М2 Упаковка (серый)
+      'PAM2': 'М2 Упаковка',
+      
+      // М2 Штучн.компл.однострочн (серый)
+      'PPM2': 'М2 Штучн.компл.однострочн',
+      'PS2S': 'М2 Штучн.компл.однострочн',
+      
+      // М3 Коробочная комплектация (фиолетовый)
+      'PCM3': 'М3 Коробочная комплектация',
+      'PM31': 'М3 Коробочная комплектация',
+      'PM33': 'М3 Коробочная комплектация',
+      'PM3S': 'М3 Коробочная комплектация',
+      
+      // М3 Штучная комплектация (фиолетовый)
+      'PS3S': 'М3 Штучная комплектация',
+      'PM3Z': 'М3 Штучная комплектация',
+      
+      // М3 Штучн.компл.однострочн (фиолетовый)
+      'PPM3': 'М3 Штучн.компл.однострочн',
+      'PS3M': 'М3 Штучн.компл.однострочн',
+      
+      // М4 Коробочная комплектация (розовый)
+      'PCM4': 'М4 Коробочная комплектация',
+      'PM42': 'М4 Коробочная комплектация',
+      'PM41': 'М4 Коробочная комплектация',
+      
+      // М4 Штучная комплектация (розовый)
+      'PS4L': 'М4 Штучная комплектация',
+      'PS4S': 'М4 Штучная комплектация',
+      'PS4M': 'М4 Штучная комплектация',
+      
+      // М4 Штучн.компл.однострочн (розовый)
+      'PPM4': 'М4 Штучн.компл.однострочн',
+      
+      // М4 Упаковка (розовый)
+      'PAM4': 'М4 Упаковка',
+      
+      // М5 Коробочная комплектация (зеленый)
+      'PCM5': 'М5 Коробочная комплектация',
+      'PM51': 'М5 Коробочная комплектация',
+      'PM53': 'М5 Коробочная комплектация',
+      
+      // М5 Штучная комплектация (зеленый)
+      'PS5L': 'М5 Штучная комплектация',
+      'PS5M': 'М5 Штучная комплектация',
+      'PS5U': 'М5 Штучная комплектация',
+      
+      // М5 Штучн.компл.однострочн (зеленый)
+      'PPM5': 'М5 Штучн.компл.однострочн',
+      
+      // М5 Упаковка (зеленый)
+      'PAM5': 'М5 Упаковка',
+      
+      // ПМ Упаковка (желтый внизу)
+      'DEF': 'ПМ Упаковка',
     };
     
-    return mapping[wcr] || null;  // null если не найдено = игнорировать
-  }
-
-  /**
-   * Маппинг Queue (очередь) → Тип комплектации
-   * Возвращает null для служебных операций (не комплектация)
-   */
-  private mapQueueToOperationType(queue: string): string | null {
-    if (!queue) return null;
-    
-    const queueUpper = queue.toUpperCase();
-    
-    // ИГНОРИРУЕМ служебные операции (не комплектация!)
-    const ignorePatterns = [
-      'INT_',      // Внутренние операции
-      'OUT_',      // Отгрузка
-      'UNLOAD',    // Разгрузка
-      'DEF',       // Дефолт
-      'INV_',      // Инвентаризация
-      'REPL',      // Пополнение
-    ];
-    
-    for (const pattern of ignorePatterns) {
-      if (queueUpper.includes(pattern)) {
-        return null;  // Игнорируем эту операцию
-      }
-    }
-    
-    // Маппинг только INB_* (входящая комплектация)
-    const mapping: { [key: string]: string } = {
-      // Коробочная комплектация
-      'INB_PSOC': 'Коробочная комплектация',
-      
-      // Штучная комплектация      
-      'INB_PSOS': 'Штучная комплектация',
-      'INB_PSSO': 'Штучная комплектация',
-      'INB_SPST': 'Штучная комплектация',
-      'INB_PSSM': 'Штучная комплектация',
-      
-      // Штучн.компл.однострочн
-      'INB_PSO1': 'Штучн.компл.однострочн',
-      'INB_PSZD': 'Штучн.компл.однострочн',
-      
-      // Упаковка
-      'PACK': 'Упаковка',
-      'INB_PACK': 'Упаковка',
-    };
-    
-    // Точное совпадение
-    if (mapping[queue]) return mapping[queue];
-    
-      // Упаковка (PACK_MZ*)
-      if (queueUpper.startsWith('PACK_')) {
-        return 'Упаковка';
-      }
-      
-      // Поиск по частичному совпадению только для INB_*
-      if (queueUpper.startsWith('INB_')) {
-        for (const [key, value] of Object.entries(mapping)) {
-          if (queueUpper.includes(key)) return value;
-        }
-        
-        // Попытка угадать по окончанию для INB_*
-        if (queueUpper.includes('PSOC')) return 'Коробочная комплектация';
-        if (queueUpper.includes('PSOS')) return 'Штучная комплектация';
-        if (queueUpper.includes('PSO1')) return 'Штучн.компл.однострочн';
-        if (queueUpper.includes('PACK')) return 'Упаковка';
-      }
-      
-      return null;  // Неизвестный тип - игнорируем
+    return mapping[wcr] || null;
   }
 
   /**
@@ -367,17 +377,22 @@ export class SapIntegrationService {
       );
 
       if (warehouse) {
+        // Формируем ФИО из данных SAP (McName1 = фамилия, McName2 = имя)
+        const lastName = operation.employeeName1 || '';
+        const firstName = operation.employeeName2 || '';
+        const fio = `${lastName} ${firstName}`.trim() || `Сотрудник ${operation.employeeId}`;
+        
         await this.db.execute(
           `INSERT INTO users (employee_id, fio, warehouse_id, role, is_active)
            VALUES (@employeeId, @fio, @warehouseId, 'employee', 1)`,
           {
             employeeId: operation.employeeId,
-            fio: `Сотрудник ${operation.employeeId}`,
+            fio: fio,
             warehouseId: warehouse.id,
           }
         );
 
-        this.logger.log(`✅ Создан новый пользователь: ${operation.employeeId}`);
+        this.logger.log(`✅ Создан новый пользователь: ${operation.employeeId} (${fio})`);
 
         // Повторно получаем пользователя
         user = await this.db.queryOne(
@@ -390,16 +405,8 @@ export class SapIntegrationService {
       }
     }
 
-    // Формируем полное название операции (Участок + Тип)
-    // Только если оба поля определены и не "Неизвестно"
-    let fullOperationType = operation.operationType;
-    
-    if (operation.participantArea && 
-        operation.participantArea !== 'Неизвестно' && 
-        operation.operationType && 
-        operation.operationType !== 'Неизвестно') {
-      fullOperationType = `${operation.participantArea} ${operation.operationType}`;
-    }
+    // Полный тип уже приходит из маппинга WCR как "Участок Тип" (напр. "ФС Коробочная комплектация")
+    const fullOperationType = operation.operationType;
     
     // Если operation_type не определен, пропускаем (нет тарифа)
     if (!fullOperationType || fullOperationType === 'Неизвестно') {
@@ -496,6 +503,43 @@ export class SapIntegrationService {
     }
     
     return true;  // Успешно сохранено
+  }
+
+  /**
+   * Полная очистка: все операции, salary_summary и сотрудники (role = 'employee'). Админы не удаляются.
+   */
+  private async wipeOperationsAndEmployees(): Promise<{
+    operationsDeleted: number;
+    summaryDeleted: number;
+    usersDeleted: number;
+  }> {
+    const operationsDeleted = await this.db.execute(`DELETE FROM operations`);
+    const summaryDeleted = await this.db.execute(`DELETE FROM salary_summary`);
+    const usersDeleted = await this.db.execute(
+      `DELETE FROM users WHERE role = 'employee'`,
+    );
+    return { operationsDeleted, summaryDeleted, usersDeleted };
+  }
+
+  /**
+   * Удаление операций за период по складу перед повторной загрузкой (только таблица operations)
+   */
+  private async deleteOperationsForPeriod(
+    warehouseCode: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<void> {
+    const startStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
+    const endStr = endDate.toISOString().slice(0, 19).replace('T', ' ');
+
+    const deletedOps = await this.db.execute(
+      `DELETE FROM operations 
+       WHERE warehouse_code = @warehouseCode 
+         AND operation_date >= @startDate 
+         AND operation_date <= @endDate`,
+      { warehouseCode, startDate: startStr, endDate: endStr },
+    );
+    this.logger.log(`🗑️ Удалено операций по складу ${warehouseCode}: ${deletedOps}`);
   }
 
   /**
