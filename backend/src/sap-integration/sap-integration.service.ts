@@ -35,10 +35,17 @@ export class SapIntegrationService {
   }
 
   /**
-   * Синхронизация данных из SAP для всех складов (ежедневная загрузка за вчера)
+   * Синхронизация данных из SAP для всех складов
+   * Перезагрузка февраля 2026: удаляем все операции за февраль и загружаем заново
    */
   async syncAllWarehouses(): Promise<void> {
     this.logger.log('🔄 Начало синхронизации данных из SAP для всех складов');
+
+    // Удаляем все операции за февраль 2026 перед повторной загрузкой
+    const febStart = new Date(Date.UTC(2026, 1, 1, 0, 0, 0, 0));
+    const febEnd = new Date(Date.UTC(2026, 1, 28, 23, 59, 59, 999));
+    const deletedTotal = await this.deleteAllOperationsForPeriod(febStart, febEnd);
+    this.logger.log(`🗑️ Удалено операций за февраль 2026: ${deletedTotal}`);
 
     // Получаем список складов из БД (активные склады)
     const warehousesQuery = `
@@ -73,80 +80,86 @@ export class SapIntegrationService {
     try {
       this.logger.log(`📦 Синхронизация склада: ${warehouseCode}`);
 
-      // Ежедневная синхронизация: вчерашний день (00:00:00 — 23:59:59 UTC)
-      const endDate = new Date();
-      endDate.setUTCDate(endDate.getUTCDate() - 1);
-      endDate.setUTCHours(23, 59, 59, 999);
-      const startDate = new Date(endDate);
-      startDate.setUTCHours(0, 0, 0, 0);
+      // Период: февраль 2026 (UTC), запросы к SAP — по 5 дней
+      const periodStart = new Date(Date.UTC(2026, 1, 1, 0, 0, 0, 0));
+      const periodEnd = new Date(Date.UTC(2026, 1, 28, 23, 59, 59, 999));
+      const chunkDays = 5;
 
-      this.logger.log(`📅 Период: ${startDate.toISOString().slice(0, 10)}`);
+      // Удаляем операции за февраль по складу (дополнительная очистка)
+      await this.deleteOperationsForPeriod(warehouseCode, periodStart, periodEnd);
 
-      // Удаляем операции за вчера по складу перед загрузкой (перезапись при повторном синке)
-      await this.deleteOperationsForPeriod(warehouseCode, startDate, endDate);
+      totalProcessed = 0;
+      let totalSkippedNoType = 0;
+      let totalSkippedNoAei = 0;
+      const chunks = this.getDateChunks(periodStart, periodEnd, chunkDays);
+      this.logger.log(`📅 Запросы по ${chunkDays} дней, всего окон: ${chunks.length}`);
 
-      // Формирование OData запроса (json — явный формат ответа SAP)
-      const filter = this.buildODataFilter(warehouseCode, startDate, endDate);
-      const url = `/WHOSet?${filter}&$format=json`;
+      for (let i = 0; i < chunks.length; i++) {
+        const { startDate, endDate } = chunks[i];
+        const filter = this.buildODataFilter(warehouseCode, startDate, endDate);
+        const url = `/WHOSet?${filter}&$format=json`;
+        this.logger.log(`📡 Окно ${i + 1}/${chunks.length}: ${startDate.toISOString().slice(0, 10)} — ${endDate.toISOString().slice(0, 10)}`);
 
-      const isRetryable = (e: any) =>
-        e?.code === 'ECONNRESET' ||
-        e?.code === 'ETIMEDOUT' ||
-        e?.message === 'aborted' ||
-        (e?.message && String(e.message).toLowerCase().includes('aborted'));
-      const maxAttempts = 3;
-      let response;
-      let lastError: any;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          response = await this.axiosInstance.get(url, { timeout: 180000 });
-          this.logger.log(`✅ SAP ответил: ${response.status}`);
-          lastError = null;
-          break;
-        } catch (error) {
-          lastError = error;
-          if (attempt < maxAttempts && isRetryable(error)) {
-            this.logger.warn(`⚠️ ${error.message || error.code}, повтор ${attempt}/${maxAttempts} через 3 сек...`);
-            await new Promise((r) => setTimeout(r, 3000));
-            continue;
+        const isRetryable = (e: any) =>
+          e?.code === 'ECONNRESET' ||
+          e?.code === 'ETIMEDOUT' ||
+          e?.message === 'aborted' ||
+          (e?.message && String(e.message).toLowerCase().includes('aborted'));
+        const maxAttempts = 3;
+        let response;
+        let lastError: any;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            response = await this.axiosInstance.get(url, { timeout: 180000 });
+            this.logger.log(`✅ SAP ответил: ${response.status}`);
+            lastError = null;
+            break;
+          } catch (error) {
+            lastError = error;
+            if (attempt < maxAttempts && isRetryable(error)) {
+              this.logger.warn(`⚠️ Окно ${i + 1}: ${error.message || error.code}, повтор ${attempt}/${maxAttempts} через 3 сек...`);
+              await new Promise((r) => setTimeout(r, 3000));
+              continue;
+            }
+            if (error.code === 'ETIMEDOUT') {
+              this.logger.error(`⏱️ Таймаут подключения к SAP серверу: ${this.sapBaseUrl}`);
+              await this.updateSyncLog(syncId, 'failed', totalProcessed, `Таймаут: SAP сервер недоступен`);
+              throw new Error(`SAP сервер недоступен (ETIMEDOUT). Проверьте сетевое подключение.`);
+            }
+            if (error.code === 'ECONNREFUSED') {
+              this.logger.error(`🚫 SAP сервер отказал в подключении: ${this.sapBaseUrl}`);
+              await this.updateSyncLog(syncId, 'failed', totalProcessed, `Ошибка: соединение отклонено`);
+              throw new Error(`SAP сервер отказал в подключении (ECONNREFUSED)`);
+            }
+            if (error.response) {
+              this.logger.error(`❌ SAP вернул ошибку ${error.response.status}: ${error.response.statusText}`);
+              await this.updateSyncLog(syncId, 'failed', totalProcessed, `HTTP ${error.response.status}: ${error.response.statusText}`);
+              throw new Error(`SAP вернул ошибку: ${error.response.status} ${error.response.statusText}`);
+            }
+            throw error;
           }
-          if (error.code === 'ETIMEDOUT') {
-            this.logger.error(`⏱️ Таймаут подключения к SAP серверу: ${this.sapBaseUrl}`);
-            await this.updateSyncLog(syncId, 'failed', totalProcessed, `Таймаут: SAP сервер недоступен`);
-            throw new Error(`SAP сервер недоступен (ETIMEDOUT). Проверьте сетевое подключение.`);
-          }
-          if (error.code === 'ECONNREFUSED') {
-            this.logger.error(`🚫 SAP сервер отказал в подключении: ${this.sapBaseUrl}`);
-            await this.updateSyncLog(syncId, 'failed', totalProcessed, `Ошибка: соединение отклонено`);
-            throw new Error(`SAP сервер отказал в подключении (ECONNREFUSED)`);
-          }
-          if (error.response) {
-            this.logger.error(`❌ SAP вернул ошибку ${error.response.status}: ${error.response.statusText}`);
-            await this.updateSyncLog(syncId, 'failed', totalProcessed, `HTTP ${error.response.status}: ${error.response.statusText}`);
-            throw new Error(`SAP вернул ошибку: ${error.response.status} ${error.response.statusText}`);
-          }
-          throw error;
         }
-      }
-      if (lastError && !response) {
-        this.logger.error(`❌ Исчерпаны попытки, последняя ошибка: ${lastError.message || lastError.code}`);
-        await this.updateSyncLog(syncId, 'failed', totalProcessed, lastError.message || String(lastError));
-        throw lastError;
+        if (lastError && !response) {
+          this.logger.error(`❌ Окно ${i + 1}: исчерпаны попытки, последняя ошибка: ${lastError.message || lastError.code}`);
+          await this.updateSyncLog(syncId, 'failed', totalProcessed, lastError.message || String(lastError));
+          throw lastError;
+        }
+
+        const allRecords = this.parseODataResponse(response.data);
+        const operations = allRecords.filter(op => op !== null);
+        totalSkippedNoAei += allRecords.length - operations.length;
+        this.logger.log(`   Записей: ${allRecords.length}, операций: ${operations.length}`);
+
+        let chunkSaved = 0;
+        for (const operation of operations) {
+          const saved = await this.saveOperation(operation, warehouseCode);
+          if (saved) chunkSaved++;
+          else totalSkippedNoType++;
+        }
+        totalProcessed += chunkSaved;
       }
 
-      const allRecords = this.parseODataResponse(response.data);
-      const operations = allRecords.filter(op => op !== null);
-      const skippedNoAei = allRecords.length - operations.length;
-      this.logger.log(`Получено записей: ${allRecords.length}, операций: ${operations.length}`);
-
-      let skippedNoType = 0;
-      for (const operation of operations) {
-        const saved = await this.saveOperation(operation, warehouseCode);
-        if (saved) totalProcessed++;
-        else skippedNoType++;
-      }
-
-      this.logger.log(`📊 Статистика: сохранено ${totalProcessed}, пропущено (нет АЕИ/типа): ${skippedNoAei + skippedNoType}`);
+      this.logger.log(`📊 Итого по складу ${warehouseCode}: сохранено ${totalProcessed}, пропущено (нет АЕИ/типа): ${totalSkippedNoAei + totalSkippedNoType}`);
       await this.updateSyncLog(syncId, 'success', totalProcessed);
       this.logger.log(`✅ Склад ${warehouseCode}: обработано ${totalProcessed} операций`);
     } catch (error) {
@@ -519,6 +532,19 @@ export class SapIntegrationService {
       `DELETE FROM users WHERE role = 'employee'`,
     );
     return { operationsDeleted, summaryDeleted, usersDeleted };
+  }
+
+  /**
+   * Удаление всех операций за период по всем складам
+   */
+  private async deleteAllOperationsForPeriod(startDate: Date, endDate: Date): Promise<number> {
+    const startStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
+    const endStr = endDate.toISOString().slice(0, 19).replace('T', ' ');
+    return await this.db.execute(
+      `DELETE FROM operations 
+       WHERE operation_date >= @startDate AND operation_date <= @endDate`,
+      { startDate: startStr, endDate: endStr },
+    );
   }
 
   /**

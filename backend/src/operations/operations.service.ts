@@ -99,7 +99,10 @@ export class OperationsService {
         COUNT(DISTINCT sd.operation_id) as operations_count,
         SUM(sd.aei_count) as total_aei,
         SUM(sd.base_amount) as base_amount,
-        SUM(sbd.total_amount * (sd.base_amount / sbd.base_amount)) as total_amount
+        SUM(CASE 
+          WHEN sbd.base_amount > 0 THEN sbd.total_amount * (sd.base_amount / sbd.base_amount)
+          ELSE sd.base_amount
+        END) as total_amount
       FROM v_salary_details sd
       INNER JOIN v_salary_by_day sbd ON 
         sd.user_id = sbd.user_id 
