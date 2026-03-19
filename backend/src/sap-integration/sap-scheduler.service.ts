@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ConfigService } from '@nestjs/config';
 import { SapIntegrationService } from './sap-integration.service';
 import { LoggerService } from '../common/logger/logger.service';
 
@@ -8,38 +7,63 @@ import { LoggerService } from '../common/logger/logger.service';
 export class SapSchedulerService {
   constructor(
     private sapIntegrationService: SapIntegrationService,
-    private configService: ConfigService,
     private logger: LoggerService,
   ) {}
 
   /**
-   * Ежедневная синхронизация данных из SAP
-   * Время задается через .env (SYNC_CRON_SCHEDULE)
-   * По умолчанию: каждый день в 2:00 ночи
+   * Ежедневная синхронизация — только вчера (24 часа)
+   * Запускается каждый день в 02:00 по серверному времени
+   *
+   * Идемпотентность: сначала удаляем вчерашние данные по складу,
+   * затем вставляем заново → повторный запуск не ломает данные
    */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
-  async handleDailySync() {
-    this.logger.log('🕐 Запуск ежедневной синхронизации с SAP', 'SapScheduler');
+  async handleDailySync(): Promise<void> {
+    const t0 = Date.now();
+    this.logger.log('🕐 [SapScheduler] Запуск ежедневной синхронизации с SAP');
 
     try {
-      await this.sapIntegrationService.syncAllWarehouses();
-      this.logger.log('✅ Ежедневная синхронизация завершена успешно', 'SapScheduler');
+      // syncYesterday() — только вчера, динамически вычисляет даты
+      await this.sapIntegrationService.syncYesterday();
+
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+      this.logger.log(`✅ [SapScheduler] Ежедневная синхронизация завершена за ${elapsed}s`);
+
+      // Предупреждение если синхронизация заняла больше 1 часа
+      if (Date.now() - t0 > 3_600_000) {
+        this.logger.warn(
+          `⚠️  [SapScheduler] Синхронизация заняла ${elapsed}s — превышен порог 1 час. Проверить нагрузку.`,
+        );
+      }
     } catch (error) {
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
       this.logger.error(
-        '❌ Ошибка при ежедневной синхронизации',
+        `❌ [SapScheduler] Ошибка ежедневной синхронизации после ${elapsed}s: ${error.message}`,
         error.stack,
         'SapScheduler',
       );
-      // TODO: Отправить уведомление администратору (email/SMS/Telegram)
+      // TODO (Фаза 2): Отправить уведомление в Telegram/Email администратору
     }
   }
 
   /**
-   * Ручной запуск синхронизации (можно вызвать через API)
+   * Ручной запуск: синхронизация только вчера
+   * Вызывается через API: POST /api/sap/sync
    */
   async manualSync(): Promise<void> {
-    this.logger.log('🔄 Запуск ручной синхронизации с SAP', 'SapScheduler');
-    await this.sapIntegrationService.syncAllWarehouses();
+    this.logger.log('🔄 [SapScheduler] Ручная синхронизация (вчера)');
+    await this.sapIntegrationService.syncYesterday();
+  }
+
+  /**
+   * Ручной запуск для произвольного периода
+   * Используется для пересчёта февраля и исторических данных
+   * Вызывается через API: POST /api/sap/sync-period
+   */
+  async manualSyncPeriod(start: Date, end: Date): Promise<void> {
+    this.logger.log(
+      `🔄 [SapScheduler] Ручной sync периода: ${start.toISOString().slice(0, 10)} — ${end.toISOString().slice(0, 10)}`,
+    );
+    await this.sapIntegrationService.syncPeriod(start, end);
   }
 }
-

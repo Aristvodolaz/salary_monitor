@@ -4,606 +4,647 @@ import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../common/logger/logger.service';
 import axios, { AxiosInstance } from 'axios';
 import * as sql from 'mssql';
+import * as http from 'http';
+import * as https from 'https';
+
+// ────────────────────────────────────────────────────────────────
+// Типы
+// ────────────────────────────────────────────────────────────────
+
+interface SyncContext {
+  warehouseId: number;
+  warehouseCode: string;
+  /** employee_id → user DB id */
+  userMap: Map<string, number>;
+  /** operation_type → tariff */
+  tariffMap: Map<string, { rate: number; norm_aei_per_hour: number | null }>;
+  /** wcr_code → { operation_type, participant_area } */
+  wcrMap: Map<string, { operation_type: string; participant_area: string }>;
+}
+
+interface ParsedOperation {
+  employeeId: string;
+  employeeName1: string;
+  employeeName2: string;
+  warehouseCode: string;
+  /** Фактическое АЕИ из ZsumAmountItm — ОСНОВНОЙ показатель Вn */
+  aeiCount: number;
+  /** Фактическое время (минуты) — только для логов/справки */
+  actdura: number;
+  operationDate: Date;
+  sapOrderId: string | null;
+  wcr: string;
+}
+
+interface OperationRow {
+  userId: number;
+  warehouseCode: string;
+  operationType: string;
+  participantArea: string;
+  count: number;       // АЕИ (ZsumAmountItm)
+  actdura: number;     // минуты
+  operationDate: Date;
+  amount: number;      // count * rate = Вn × Рm
+  sapOrderId: string | null;
+}
+
+interface DateChunk {
+  startDate: Date;
+  endDate: Date;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Сервис
+// ────────────────────────────────────────────────────────────────
 
 @Injectable()
 export class SapIntegrationService {
   private axiosInstance: AxiosInstance;
-  private sapBaseUrl: string;
-  private warehouses: string[];
-  private syncMonthsBack: number;
+  private readonly CHUNK_DAYS          = 5;
+  private readonly WAREHOUSE_CONCURRENCY = 3;  // параллельных складов
+  private readonly CHUNK_CONCURRENCY   = 3;    // параллельных чанков SAP
+  private readonly BATCH_SIZE          = 500;  // записей на один bulk-insert
 
   constructor(
     private configService: ConfigService,
     private db: DatabaseService,
     private logger: LoggerService,
   ) {
-    this.sapBaseUrl = this.configService.get<string>('SAP_ODATA_BASE_URL');
-    this.warehouses = this.configService.get<string>('WAREHOUSES').split(',');
-    this.syncMonthsBack = this.configService.get<number>('SYNC_MONTHS_BACK', 6);
+    const sapBaseUrl = this.configService.get<string>('SAP_ODATA_BASE_URL');
+    const sapUser    = this.configService.get<string>('SAP_USERNAME');
+    const sapPass    = this.configService.get<string>('SAP_PASSWORD');
 
-    // Настройка axios с Basic Auth
     this.axiosInstance = axios.create({
-      baseURL: this.sapBaseUrl,
-      auth: {
-        username: this.configService.get<string>('SAP_USERNAME'),
-        password: this.configService.get<string>('SAP_PASSWORD'),
-      },
-      timeout: 120000, // 2 минуты таймаут (вместо бесконечного ожидания)
-      // Настройки для повторных попыток
-      validateStatus: (status) => status < 500, // Не бросать ошибку на 4xx
+      baseURL: sapBaseUrl,
+      auth: { username: sapUser, password: sapPass },
+      timeout: 120_000,
+      // HTTP Keep-Alive: переиспользуем TCP-соединения между запросами
+      httpAgent:  new http.Agent({ keepAlive: true, maxSockets: 5 }),
+      httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 5 }),
+      validateStatus: (status) => status < 500,
     });
   }
 
+  // ──────────────────────────────────────────────────────────────
+  // PUBLIC API
+  // ──────────────────────────────────────────────────────────────
+
   /**
-   * Синхронизация данных из SAP для всех складов
-   * Перезагрузка февраля 2026: удаляем все операции за февраль и загружаем заново
+   * Ежедневная синхронизация — только вчера (24 часа)
+   * Вызывается планировщиком в 02:00
    */
-  async syncAllWarehouses(): Promise<void> {
+  async syncYesterday(): Promise<void> {
+    const now       = new Date();
+    const todayUtc  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const yestStart = new Date(todayUtc);
+    yestStart.setUTCDate(yestStart.getUTCDate() - 1);
+    const yestEnd   = new Date(todayUtc.getTime() - 1); // 23:59:59.999 вчера
+
+    this.logger.log(`📅 Ежедневный sync: ${yestStart.toISOString().slice(0, 10)}`);
+    await this.syncAllWarehouses(yestStart, yestEnd);
+  }
+
+  /**
+   * Ручной пересчёт произвольного периода
+   * Пример: syncPeriod(new Date('2026-02-01'), new Date('2026-02-28'))
+   */
+  async syncPeriod(start: Date, end: Date): Promise<void> {
+    this.logger.log(
+      `📅 Ручной sync: ${start.toISOString().slice(0, 10)} — ${end.toISOString().slice(0, 10)}`,
+    );
+    await this.syncAllWarehouses(start, end);
+  }
+
+  /**
+   * Ручной запуск для одного склада
+   */
+  async syncWarehouseManual(warehouseCode: string, start: Date, end: Date): Promise<void> {
+    await this.syncWarehouse(warehouseCode, start, end);
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // ОРКЕСТРАЦИЯ
+  // ──────────────────────────────────────────────────────────────
+
+  private async syncAllWarehouses(periodStart: Date, periodEnd: Date): Promise<void> {
     this.logger.log('🔄 Начало синхронизации данных из SAP для всех складов');
+    const t0 = Date.now();
 
-    // Удаляем все операции за февраль 2026 перед повторной загрузкой
-    const febStart = new Date(Date.UTC(2026, 1, 1, 0, 0, 0, 0));
-    const febEnd = new Date(Date.UTC(2026, 1, 28, 23, 59, 59, 999));
-    const deletedTotal = await this.deleteAllOperationsForPeriod(febStart, febEnd);
-    this.logger.log(`🗑️ Удалено операций за февраль 2026: ${deletedTotal}`);
+    const warehouses = await this.db.query<{ code: string; name: string }>(
+      `SELECT code, name FROM warehouses WHERE is_active = 1 ORDER BY code`,
+    );
+    this.logger.log(`📦 Активных складов: ${warehouses.length}`);
 
-    // Получаем список складов из БД (активные склады)
-    const warehousesQuery = `
-      SELECT code, name FROM warehouses WHERE is_active = 1 ORDER BY code
-    `;
-    const warehousesFromDb = await this.db.query(warehousesQuery);
-    
-    this.logger.log(`📦 Найдено складов в БД: ${warehousesFromDb.length}`);
-
-    for (const warehouse of warehousesFromDb) {
-      try {
-        this.logger.log(`\n📦 Склад: ${warehouse.code} (${warehouse.name})`);
-        await this.syncWarehouse(warehouse.code);
-      } catch (error) {
-        this.logger.error(
-          `Ошибка синхронизации склада ${warehouse.code}: ${error.message}`,
-          error.stack,
-        );
-      }
+    // Параллельно по WAREHOUSE_CONCURRENCY складов
+    for (let i = 0; i < warehouses.length; i += this.WAREHOUSE_CONCURRENCY) {
+      const batch = warehouses.slice(i, i + this.WAREHOUSE_CONCURRENCY);
+      await Promise.all(
+        batch.map((w) =>
+          this.syncWarehouse(w.code, periodStart, periodEnd).catch((err) =>
+            this.logger.error(`❌ Склад ${w.code}: ${err.message}`, err.stack),
+          ),
+        ),
+      );
     }
 
-    this.logger.log('\n✅ Синхронизация завершена');
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    this.logger.log(`✅ Синхронизация всех складов завершена за ${elapsed}s`);
   }
 
   /**
-   * Синхронизация данных для одного склада
+   * Синхронизация одного склада:
+   * 1. Preload: users + tariffs + wcrMap (3 SELECT, не N+1)
+   * 2. Параллельные чанки из SAP API
+   * 3. In-memory маппинг (без DB-запросов)
+   * 4. Bulk MERGE в БД батчами по BATCH_SIZE
    */
-  async syncWarehouse(warehouseCode: string): Promise<void> {
-    const syncId = await this.createSyncLog(warehouseCode);
-
-    let totalProcessed = 0;
-    try {
-      this.logger.log(`📦 Синхронизация склада: ${warehouseCode}`);
-
-      // Период: февраль 2026 (UTC), запросы к SAP — по 5 дней
-      const periodStart = new Date(Date.UTC(2026, 1, 1, 0, 0, 0, 0));
-      const periodEnd = new Date(Date.UTC(2026, 1, 28, 23, 59, 59, 999));
-      const chunkDays = 5;
-
-      // Удаляем операции за февраль по складу (дополнительная очистка)
-      await this.deleteOperationsForPeriod(warehouseCode, periodStart, periodEnd);
-
-      totalProcessed = 0;
-      let totalSkippedNoType = 0;
-      let totalSkippedNoAei = 0;
-      const chunks = this.getDateChunks(periodStart, periodEnd, chunkDays);
-      this.logger.log(`📅 Запросы по ${chunkDays} дней, всего окон: ${chunks.length}`);
-
-      for (let i = 0; i < chunks.length; i++) {
-        const { startDate, endDate } = chunks[i];
-        const filter = this.buildODataFilter(warehouseCode, startDate, endDate);
-        const url = `/WHOSet?${filter}&$format=json`;
-        this.logger.log(`📡 Окно ${i + 1}/${chunks.length}: ${startDate.toISOString().slice(0, 10)} — ${endDate.toISOString().slice(0, 10)}`);
-
-        const isRetryable = (e: any) =>
-          e?.code === 'ECONNRESET' ||
-          e?.code === 'ETIMEDOUT' ||
-          e?.message === 'aborted' ||
-          (e?.message && String(e.message).toLowerCase().includes('aborted'));
-        const maxAttempts = 3;
-        let response;
-        let lastError: any;
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          try {
-            response = await this.axiosInstance.get(url, { timeout: 180000 });
-            this.logger.log(`✅ SAP ответил: ${response.status}`);
-            lastError = null;
-            break;
-          } catch (error) {
-            lastError = error;
-            if (attempt < maxAttempts && isRetryable(error)) {
-              this.logger.warn(`⚠️ Окно ${i + 1}: ${error.message || error.code}, повтор ${attempt}/${maxAttempts} через 3 сек...`);
-              await new Promise((r) => setTimeout(r, 3000));
-              continue;
-            }
-            if (error.code === 'ETIMEDOUT') {
-              this.logger.error(`⏱️ Таймаут подключения к SAP серверу: ${this.sapBaseUrl}`);
-              await this.updateSyncLog(syncId, 'failed', totalProcessed, `Таймаут: SAP сервер недоступен`);
-              throw new Error(`SAP сервер недоступен (ETIMEDOUT). Проверьте сетевое подключение.`);
-            }
-            if (error.code === 'ECONNREFUSED') {
-              this.logger.error(`🚫 SAP сервер отказал в подключении: ${this.sapBaseUrl}`);
-              await this.updateSyncLog(syncId, 'failed', totalProcessed, `Ошибка: соединение отклонено`);
-              throw new Error(`SAP сервер отказал в подключении (ECONNREFUSED)`);
-            }
-            if (error.response) {
-              this.logger.error(`❌ SAP вернул ошибку ${error.response.status}: ${error.response.statusText}`);
-              await this.updateSyncLog(syncId, 'failed', totalProcessed, `HTTP ${error.response.status}: ${error.response.statusText}`);
-              throw new Error(`SAP вернул ошибку: ${error.response.status} ${error.response.statusText}`);
-            }
-            throw error;
-          }
-        }
-        if (lastError && !response) {
-          this.logger.error(`❌ Окно ${i + 1}: исчерпаны попытки, последняя ошибка: ${lastError.message || lastError.code}`);
-          await this.updateSyncLog(syncId, 'failed', totalProcessed, lastError.message || String(lastError));
-          throw lastError;
-        }
-
-        const allRecords = this.parseODataResponse(response.data);
-        const operations = allRecords.filter(op => op !== null);
-        totalSkippedNoAei += allRecords.length - operations.length;
-        this.logger.log(`   Записей: ${allRecords.length}, операций: ${operations.length}`);
-
-        let chunkSaved = 0;
-        for (const operation of operations) {
-          const saved = await this.saveOperation(operation, warehouseCode);
-          if (saved) chunkSaved++;
-          else totalSkippedNoType++;
-        }
-        totalProcessed += chunkSaved;
-      }
-
-      this.logger.log(`📊 Итого по складу ${warehouseCode}: сохранено ${totalProcessed}, пропущено (нет АЕИ/типа): ${totalSkippedNoAei + totalSkippedNoType}`);
-      await this.updateSyncLog(syncId, 'success', totalProcessed);
-      this.logger.log(`✅ Склад ${warehouseCode}: обработано ${totalProcessed} операций`);
-    } catch (error) {
-      const errorMessage = error.response?.data || error.message;
-      this.logger.error(`❌ Детали ошибки SAP: ${JSON.stringify(errorMessage)}`);
-      await this.updateSyncLog(syncId, 'failed', totalProcessed, JSON.stringify(errorMessage));
-      throw error;
-    }
-  }
-
-  /**
-   * Разбивает период на окна по N дней (UTC), чтобы границы в логах и OData совпадали с календарём
-   */
-  private getDateChunks(
+  private async syncWarehouse(
+    warehouseCode: string,
     periodStart: Date,
     periodEnd: Date,
-    chunkDays: number,
-  ): { startDate: Date; endDate: Date }[] {
-    const chunks: { startDate: Date; endDate: Date }[] = [];
-    let start = new Date(periodStart.getTime());
-    while (start <= periodEnd) {
-      const end = new Date(start.getTime());
-      end.setUTCDate(end.getUTCDate() + chunkDays - 1);
-      end.setUTCHours(23, 59, 59, 999);
-      if (end > periodEnd) end.setTime(periodEnd.getTime());
-      chunks.push({ startDate: new Date(start.getTime()), endDate: new Date(end.getTime()) });
-      start.setUTCDate(start.getUTCDate() + chunkDays);
-      start.setUTCHours(0, 0, 0, 0);
-    }
-    return chunks;
-  }
+  ): Promise<void> {
+    const syncId   = await this.createSyncLog(warehouseCode);
+    const t0       = Date.now();
+    let totalSaved = 0;
 
-  /**
-   * Формирование OData фильтра
-   */
-  private buildODataFilter(
-    warehouseCode: string,
-    startDate: Date,
-    endDate: Date,
-  ): string {
-    const formatDate = (date: Date) => date.toISOString().split('.')[0];
+    try {
+      this.logger.log(`\n📦 Склад ${warehouseCode}: загрузка контекста...`);
 
-    return `$filter=(Lgnum eq '${warehouseCode}' and (ConfirmedDate ge datetime'${formatDate(startDate)}' and ConfirmedDate le datetime'${formatDate(endDate)}'))`;
-  }
+      // Шаг 1: Preload всего необходимого (3 параллельных запроса)
+      const ctx = await this.buildSyncContext(warehouseCode, periodStart);
+      this.logger.log(
+        `   Контекст: ${ctx.userMap.size} юзеров, ` +
+        `${ctx.tariffMap.size} тарифов, ${ctx.wcrMap.size} WCR`,
+      );
 
-  /**
-   * Парсинг OData ответа
-   */
-  private parseODataResponse(data: any): any[] {
-    // SAP OData возвращает данные в формате { d: { results: [...] } }
-    const results = data?.d?.results || [];
+      // Шаг 2: Очистка периода (идемпотентность)
+      const deleted = await this.deleteOperationsForPeriod(warehouseCode, periodStart, periodEnd);
+      this.logger.log(`   🗑️  Удалено старых записей: ${deleted}`);
 
-    return results.map((item: any) => {
-      // Парсинг даты из формата /Date(timestamp)/
-      let operationDate = new Date();
-      if (item.ConfirmedDate) {
-        const timestamp = item.ConfirmedDate.match(/\/Date\((\d+)\)\//);
-        if (timestamp) {
-          operationDate = new Date(parseInt(timestamp[1], 10));
+      // Шаг 3: Параллельная загрузка чанков из SAP
+      const chunks   = this.getDateChunks(periodStart, periodEnd, this.CHUNK_DAYS);
+      const allItems = await this.fetchChunksParallel(warehouseCode, chunks);
+      this.logger.log(`   SAP вернул: ${allItems.length} записей`);
+
+      // Шаг 4: Парсинг и маппинг (полностью in-memory, без DB)
+      const newUsers    = new Map<string, { fio: string }>();
+      const operations: OperationRow[] = [];
+      let skippedNoAei    = 0;
+      let skippedNoWcr    = 0;
+      let skippedNoTariff = 0;
+
+      const resolveOperation = (item: any): OperationRow | null => {
+        const parsed = this.parseItem(item);
+        if (!parsed) { skippedNoAei++; return null; }
+
+        const wcrEntry = ctx.wcrMap.get(parsed.wcr);
+        if (!wcrEntry) { skippedNoWcr++; return null; }
+
+        const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
+        if (!tariff) { skippedNoTariff++; return null; }
+
+        const userId = ctx.userMap.get(parsed.employeeId);
+        if (userId === undefined) return null; // новые юзеры обрабатываются отдельно
+
+        // ╔════════════════════════════════════════════════════╗
+        // ║  КЛЮЧЕВАЯ ФОРМУЛА:                                ║
+        // ║  Вn = ZsumAmountItm  (фактическое АЕИ из WMS)    ║
+        // ║  Рm = tariff.rate    (расценка за 1 АЕИ)          ║
+        // ║  Сумма = Вn × Рm     (без Ккач — он в Views)     ║
+        // ╚════════════════════════════════════════════════════╝
+        return {
+          userId,
+          warehouseCode,
+          operationType:   wcrEntry.operation_type,
+          participantArea: wcrEntry.participant_area,
+          count:  parsed.aeiCount,              // Вn = ZsumAmountItm
+          actdura: parsed.actdura,
+          operationDate: parsed.operationDate,
+          amount: parsed.aeiCount * tariff.rate, // Вn × Рm
+          sapOrderId: parsed.sapOrderId,
+        };
+      };
+
+      for (const item of allItems) {
+        const parsed = this.parseItem(item);
+        if (!parsed) { skippedNoAei++; continue; }
+
+        const wcrEntry = ctx.wcrMap.get(parsed.wcr);
+        if (!wcrEntry) { skippedNoWcr++; continue; }
+
+        const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
+        if (!tariff) { skippedNoTariff++; continue; }
+
+        const userId = ctx.userMap.get(parsed.employeeId);
+        if (userId === undefined) {
+          // Запоминаем нового сотрудника
+          if (!newUsers.has(parsed.employeeId)) {
+            const fio = `${parsed.employeeName1} ${parsed.employeeName2}`.trim()
+              || `Сотрудник ${parsed.employeeId}`;
+            newUsers.set(parsed.employeeId, { fio });
+          }
+          continue;
+        }
+
+        operations.push({
+          userId,
+          warehouseCode,
+          operationType:   wcrEntry.operation_type,
+          participantArea: wcrEntry.participant_area,
+          count:           parsed.aeiCount,
+          actdura:         parsed.actdura,
+          operationDate:   parsed.operationDate,
+          amount:          parsed.aeiCount * tariff.rate,
+          sapOrderId:      parsed.sapOrderId,
+        });
+      }
+
+      // Шаг 5: Создаём новых сотрудников и обрабатываем их записи
+      if (newUsers.size > 0) {
+        await this.createNewUsers(newUsers, ctx);
+        // Перезагружаем userMap
+        const freshUsers = await this.db.query<{ employee_id: string; id: number }>(
+          `SELECT id, employee_id FROM users WHERE warehouse_id = @wid`,
+          { wid: ctx.warehouseId },
+        );
+        freshUsers.forEach((u) => ctx.userMap.set(u.employee_id, u.id));
+
+        // Обрабатываем записи для только что созданных пользователей
+        for (const item of allItems) {
+          const parsed = this.parseItem(item);
+          if (!parsed || !newUsers.has(parsed.employeeId)) continue;
+
+          const resolved = resolveOperation(item);
+          if (resolved) operations.push(resolved);
         }
       }
 
-      // Маппинг полного типа операции из WCR (Участок + Тип)
-      const finalOperationType = this.mapWcrToFullOperationType(item.Wcr);
-      
-      // Пропускаем если WCR не найден в маппинге (служебные операции)
-      if (!finalOperationType) {
-        return null;
+      // Шаг 6: Bulk-upsert батчами
+      for (let b = 0; b < operations.length; b += this.BATCH_SIZE) {
+        await this.bulkUpsertOperations(operations.slice(b, b + this.BATCH_SIZE));
+        totalSaved += Math.min(this.BATCH_SIZE, operations.length - b);
       }
 
-      // Получаем АЕИ из поля ZsumAmountItm
-      const aeiCount = parseFloat(item.ZsumAmountItm || '0');
-      
-      // Пропускаем записи где АЕИ = 0 (записываем только где больше 0)
-      if (aeiCount <= 0) {
-        return null;
-      }
-      
-      // Фактическое время в минутах (для справки)
-      const actduraMinutes = parseFloat(item.Actdura || '0');
-      // Участок — первое слово полного типа (ФС, ДО, МС, М2, М3, М4, М5, ПМ) для отчётов и расчётов
-      const participantArea = (finalOperationType && finalOperationType.split(' ')[0]) || null;
-
-      return {
-        employeeId: item.Employeeid || item.Processor,     // ID сотрудника
-        employeeName1: (item.McName1 || '').trim(),        // Фамилия
-        employeeName2: (item.McName2 || '').trim(),        // Имя
-        warehouseCode: item.Lgnum,                         // Склад
-        operationType: finalOperationType,                 // Полный тип: "Участок Тип"
-        participantArea,                                    // Участок для participant_area в БД
-        actdura: actduraMinutes,                           // Фактическое время (минуты)
-        count: aeiCount,                                   // АЕИ из SAP (ZsumAmountItm)
-        operationDate: operationDate,                      // Дата подтверждения
-        sapOrderId: item.Who || null,                      // ID заказа
-        wcr: item.Wcr,                                     // Сохраняем для отладки
-        queue: item.Queue,                                 // Сохраняем для отладки
-      };
-    }).filter((item: any) => item !== null); // Фильтруем null (записи без АЕИ или неизвестного типа)
-  }
-
-  /**
-   * Маппинг WCR → Полный тип операции (Участок + Тип)
-   * Возвращает null для неизвестных/служебных кодов
-   */
-  private mapWcrToFullOperationType(wcr: string): string | null {
-    if (!wcr) return null;
-    
-    const mapping: { [key: string]: string } = {
-      // ФС Коробочная комплектация (желтый)
-      'PCST': 'ФС Коробочная комплектация',
-      'PST2': 'ФС Коробочная комплектация',
-      'PST1': 'ФС Коробочная комплектация',
-      'PST3': 'ФС Коробочная комплектация',
-      'PSST': 'ФС Коробочная комплектация',
-      
-      // ФС Штучная комплектация (желтый)
-      'PM12': 'ФС Штучная комплектация',
-      'PM13': 'ФС Штучная комплектация',
-      'PS1S': 'ФС Штучная комплектация',
-      'PS01': 'ФС Штучная комплектация',
-      
-      // ДО Коробочная комплектация (зеленый)
-      'PCD1': 'ДО Коробочная комплектация',
-      'PSCD': 'ДО Коробочная комплектация',
-      
-      // ДО Штучная комплектация (зеленый)
-      'PDO1': 'ДО Штучная комплектация',
-      'PDO3': 'ДО Штучная комплектация',
-      
-      // МС Коробочная комплектация (оранжевый)
-      'PCMC': 'МС Коробочная комплектация',
-      'PMC1': 'МС Коробочная комплектация',
-      'PMC2': 'МС Коробочная комплектация',
-      'PPMC': 'МС Коробочная комплектация',
-      
-      // МС Штучная комплектация (оранжевый)
-      'PS5S': 'МС Штучная комплектация',
-      'PSC9': 'МС Штучная комплектация',
-      
-      // МС Упаковка (оранжевый)
-      'PAMC': 'МС Упаковка',
-      
-      // М2 Коробочная комплектация (серый)
-      'PCM2': 'М2 Коробочная комплектация',
-      'PM22': 'М2 Коробочная комплектация',
-      
-      // М2 Штучная комплектация (серый)
-      'PS2L': 'М2 Штучная комплектация',
-      'PM2Z': 'М2 Штучная комплектация',
-      
-      // М2 Упаковка (серый)
-      'PAM2': 'М2 Упаковка',
-      
-      // М2 Штучн.компл.однострочн (серый)
-      'PPM2': 'М2 Штучн.компл.однострочн',
-      'PS2S': 'М2 Штучн.компл.однострочн',
-      
-      // М3 Коробочная комплектация (фиолетовый)
-      'PCM3': 'М3 Коробочная комплектация',
-      'PM31': 'М3 Коробочная комплектация',
-      'PM33': 'М3 Коробочная комплектация',
-      'PM3S': 'М3 Коробочная комплектация',
-      
-      // М3 Штучная комплектация (фиолетовый)
-      'PS3S': 'М3 Штучная комплектация',
-      'PM3Z': 'М3 Штучная комплектация',
-      
-      // М3 Штучн.компл.однострочн (фиолетовый)
-      'PPM3': 'М3 Штучн.компл.однострочн',
-      'PS3M': 'М3 Штучн.компл.однострочн',
-      
-      // М4 Коробочная комплектация (розовый)
-      'PCM4': 'М4 Коробочная комплектация',
-      'PM42': 'М4 Коробочная комплектация',
-      'PM41': 'М4 Коробочная комплектация',
-      
-      // М4 Штучная комплектация (розовый)
-      'PS4L': 'М4 Штучная комплектация',
-      'PS4S': 'М4 Штучная комплектация',
-      'PS4M': 'М4 Штучная комплектация',
-      
-      // М4 Штучн.компл.однострочн (розовый)
-      'PPM4': 'М4 Штучн.компл.однострочн',
-      
-      // М4 Упаковка (розовый)
-      'PAM4': 'М4 Упаковка',
-      
-      // М5 Коробочная комплектация (зеленый)
-      'PCM5': 'М5 Коробочная комплектация',
-      'PM51': 'М5 Коробочная комплектация',
-      'PM53': 'М5 Коробочная комплектация',
-      
-      // М5 Штучная комплектация (зеленый)
-      'PS5L': 'М5 Штучная комплектация',
-      'PS5M': 'М5 Штучная комплектация',
-      'PS5U': 'М5 Штучная комплектация',
-      
-      // М5 Штучн.компл.однострочн (зеленый)
-      'PPM5': 'М5 Штучн.компл.однострочн',
-      
-      // М5 Упаковка (зеленый)
-      'PAM5': 'М5 Упаковка',
-      
-      // ПМ Упаковка (желтый внизу)
-      'DEF': 'ПМ Упаковка',
-    };
-    
-    return mapping[wcr] || null;
-  }
-
-  /**
-   * Сохранение операции в БД
-   * @returns true если сохранено, false если пропущено
-   */
-  private async saveOperation(operation: any, warehouseCode: string): Promise<boolean> {
-    // Найти или создать пользователя по employee_id
-    let user = await this.db.queryOne(
-      `SELECT id FROM users WHERE employee_id = @employeeId`,
-      { employeeId: operation.employeeId }
-    );
-
-    // Если пользователь не найден - создаем автоматически
-    if (!user) {
-      // Получаем warehouse_id по коду
-      const warehouse = await this.db.queryOne(
-        `SELECT id FROM warehouses WHERE code = @code`,
-        { code: warehouseCode }
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+      this.logger.log(
+        `✅ Склад ${warehouseCode}: ${totalSaved} сохранено | ` +
+        `noAEI=${skippedNoAei} noWCR=${skippedNoWcr} noTariff=${skippedNoTariff} | ${elapsed}s`,
       );
+      await this.updateSyncLog(syncId, 'success', totalSaved);
+    } catch (err) {
+      this.logger.error(`❌ Склад ${warehouseCode}: ${err.message}`, err.stack);
+      await this.updateSyncLog(syncId, 'failed', totalSaved, err.message);
+      throw err;
+    }
+  }
 
-      if (warehouse) {
-        // Формируем ФИО из данных SAP (McName1 = фамилия, McName2 = имя)
-        const lastName = operation.employeeName1 || '';
-        const firstName = operation.employeeName2 || '';
-        const fio = `${lastName} ${firstName}`.trim() || `Сотрудник ${operation.employeeId}`;
-        
+  // ──────────────────────────────────────────────────────────────
+  // PRELOAD КОНТЕКСТ (3 параллельных запроса вместо N+1)
+  // ──────────────────────────────────────────────────────────────
+
+  private async buildSyncContext(warehouseCode: string, referenceDate: Date): Promise<SyncContext> {
+    const [warehouseRow, users, tariffs, wcrRows] = await Promise.all([
+      this.db.queryOne<{ id: number }>(
+        `SELECT id FROM warehouses WHERE code = @code`,
+        { code: warehouseCode },
+      ),
+      this.db.query<{ employee_id: string; id: number }>(
+        `SELECT id, employee_id FROM users
+         WHERE warehouse_id = (SELECT id FROM warehouses WHERE code = @code)`,
+        { code: warehouseCode },
+      ),
+      // Тарифы: warehouse-specific имеет приоритет над ALL
+      this.db.query<{ operation_type: string; rate: number; norm_aei_per_hour: number | null }>(
+        `SELECT operation_type, rate, norm_aei_per_hour
+         FROM tariffs
+         WHERE (warehouse_code = @code OR warehouse_code = 'ALL')
+           AND is_active = 1
+           AND @refDate >= valid_from
+           AND (valid_to IS NULL OR @refDate <= valid_to)
+         ORDER BY
+           CASE WHEN warehouse_code = @code THEN 1 ELSE 2 END,
+           valid_from DESC`,
+        { code: warehouseCode, refDate: referenceDate },
+      ),
+      // WCR-маппинг из БД (не hardcode!)
+      this.db.query<{ wcr_code: string; operation_type: string; participant_area: string }>(
+        `SELECT wcr_code, operation_type, participant_area
+         FROM wcr_mapping WHERE is_active = 1`,
+      ),
+    ]);
+
+    if (!warehouseRow) throw new Error(`Склад не найден в БД: ${warehouseCode}`);
+
+    // Тарифы: первая запись по каждому operation_type (после сортировки — самый приоритетный)
+    const tariffMap = new Map<string, { rate: number; norm_aei_per_hour: number | null }>();
+    for (const t of tariffs) {
+      if (!tariffMap.has(t.operation_type)) {
+        tariffMap.set(t.operation_type, { rate: t.rate, norm_aei_per_hour: t.norm_aei_per_hour });
+      }
+    }
+
+    return {
+      warehouseId:  warehouseRow.id,
+      warehouseCode,
+      userMap:   new Map(users.map((u) => [u.employee_id, u.id])),
+      tariffMap,
+      wcrMap:    new Map(
+        wcrRows.map((r) => [
+          r.wcr_code,
+          { operation_type: r.operation_type, participant_area: r.participant_area },
+        ]),
+      ),
+    };
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // SAP: параллельная загрузка чанков
+  // ──────────────────────────────────────────────────────────────
+
+  private async fetchChunksParallel(warehouseCode: string, chunks: DateChunk[]): Promise<any[]> {
+    const results: any[] = [];
+
+    for (let i = 0; i < chunks.length; i += this.CHUNK_CONCURRENCY) {
+      const batch = chunks.slice(i, i + this.CHUNK_CONCURRENCY);
+      const batchData = await Promise.all(
+        batch.map((chunk, j) =>
+          this.fetchChunkWithRetry(warehouseCode, chunk, i + j, chunks.length),
+        ),
+      );
+      for (const items of batchData) results.push(...items);
+    }
+
+    return results;
+  }
+
+  private async fetchChunkWithRetry(
+    warehouseCode: string,
+    chunk: DateChunk,
+    idx: number,
+    total: number,
+  ): Promise<any[]> {
+    const filter = this.buildODataFilter(warehouseCode, chunk.startDate, chunk.endDate);
+    const url    = `/WHOSet?${filter}&$format=json`;
+    const label  = `Окно ${idx + 1}/${total} [${warehouseCode}] ` +
+                   `${chunk.startDate.toISOString().slice(0, 10)}`;
+
+    return this.withRetry(
+      async () => {
+        const resp  = await this.axiosInstance.get(url, { timeout: 180_000 });
+        const items = resp.data?.d?.results || [];
+        this.logger.log(`   📡 ${label} → ${items.length} записей`);
+        return items;
+      },
+      { label, maxAttempts: 3 },
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // ПАРСИНГ ЗАПИСИ ИЗ SAP OData
+  // ──────────────────────────────────────────────────────────────
+
+  private parseItem(item: any): ParsedOperation | null {
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║  Вn = ZsumAmountItm — ФАКТИЧЕСКОЕ АЕИ из WMS               ║
+    // ║  Это главный показатель по ТЗ. Используем напрямую.         ║
+    // ║  НЕ рассчитываем из Actdura — это было источником ошибки!   ║
+    // ╚══════════════════════════════════════════════════════════════╝
+    const aeiCount = parseFloat(item.ZsumAmountItm || '0');
+    if (aeiCount <= 0) return null;
+
+    // Дата из формата /Date(timestamp)/
+    let operationDate = new Date();
+    if (item.ConfirmedDate) {
+      const m = item.ConfirmedDate.match(/\/Date\((\d+)\)\//);
+      if (m) operationDate = new Date(parseInt(m[1], 10));
+    }
+
+    return {
+      employeeId:    (item.Employeeid || item.Processor || '').trim(),
+      employeeName1: (item.McName1 || '').trim(),
+      employeeName2: (item.McName2 || '').trim(),
+      warehouseCode: item.Lgnum,
+      aeiCount,                                   // Вn = ZsumAmountItm (истинное АЕИ)
+      actdura: parseFloat(item.Actdura || '0'),   // для справки/отчётов
+      operationDate,
+      sapOrderId: item.Who || null,
+      wcr: (item.Wcr || '').trim(),
+    };
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // BULK UPSERT через MSSQL bulk + MERGE (1 round-trip на батч)
+  // ──────────────────────────────────────────────────────────────
+
+  private async bulkUpsertOperations(batch: OperationRow[]): Promise<void> {
+    if (batch.length === 0) return;
+
+    const pool = this.db.getPool();
+
+    // Строим in-memory таблицу
+    const table = new sql.Table();
+    table.columns.add('user_id',          sql.Int,           { nullable: false });
+    table.columns.add('warehouse_code',   sql.NVarChar(10),  { nullable: false });
+    table.columns.add('operation_type',   sql.NVarChar(100), { nullable: false });
+    table.columns.add('participant_area', sql.NVarChar(20),  { nullable: true });
+    table.columns.add('count',            sql.Float,         { nullable: false });
+    table.columns.add('actdura',          sql.Float,         { nullable: true });
+    table.columns.add('operation_date',   sql.DateTime,      { nullable: false });
+    table.columns.add('amount',           sql.Float,         { nullable: true });
+    table.columns.add('sap_order_id',     sql.NVarChar(100), { nullable: true });
+
+    for (const row of batch) {
+      table.rows.add(
+        row.userId,
+        row.warehouseCode,
+        row.operationType,
+        row.participantArea || null,
+        row.count,
+        row.actdura || null,
+        row.operationDate,
+        row.amount,
+        row.sapOrderId || null,
+      );
+    }
+
+    // Один network round-trip: загружаем весь батч
+    const bulkRequest = pool.request();
+    await bulkRequest.bulk(table);
+
+    // MERGE: UPDATE если существует, INSERT если нового
+    // Ключ идемпотентности: user_id + sap_order_id + operation_type
+    await pool.request().query(`
+      MERGE operations AS target
+      USING (
+        SELECT
+          user_id, warehouse_code, operation_type, participant_area,
+          count, actdura, operation_date, amount, sap_order_id
+        FROM #tmp_bulk_ops
+      ) AS source
+      ON (
+        target.user_id        = source.user_id
+        AND target.sap_order_id   = source.sap_order_id
+        AND target.operation_type = source.operation_type
+      )
+      WHEN MATCHED THEN
+        UPDATE SET
+          target.count            = source.count,
+          target.amount           = source.amount,
+          target.actdura          = source.actdura,
+          target.participant_area = source.participant_area,
+          target.updated_at       = GETDATE()
+      WHEN NOT MATCHED THEN
+        INSERT (
+          user_id, warehouse_code, operation_type, participant_area,
+          count, actdura, operation_date, amount, sap_order_id
+        ) VALUES (
+          source.user_id,        source.warehouse_code, source.operation_type,
+          source.participant_area, source.count,         source.actdura,
+          source.operation_date, source.amount,          source.sap_order_id
+        );
+    `);
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // СОЗДАНИЕ НОВЫХ ПОЛЬЗОВАТЕЛЕЙ
+  // ──────────────────────────────────────────────────────────────
+
+  private async createNewUsers(
+    newUsers: Map<string, { fio: string }>,
+    ctx: SyncContext,
+  ): Promise<void> {
+    this.logger.log(`   👤 Создание ${newUsers.size} новых сотрудников...`);
+
+    for (const [employeeId, { fio }] of newUsers) {
+      try {
         await this.db.execute(
           `INSERT INTO users (employee_id, fio, warehouse_id, role, is_active)
            VALUES (@employeeId, @fio, @warehouseId, 'employee', 1)`,
-          {
-            employeeId: operation.employeeId,
-            fio: fio,
-            warehouseId: warehouse.id,
-          }
+          { employeeId, fio, warehouseId: ctx.warehouseId },
         );
-
-        this.logger.log(`✅ Создан новый пользователь: ${operation.employeeId} (${fio})`);
-
-        // Повторно получаем пользователя
-        user = await this.db.queryOne(
-          `SELECT id FROM users WHERE employee_id = @employeeId`,
-          { employeeId: operation.employeeId }
-        );
-      } else {
-        this.logger.warn(`⚠️ Склад не найден: ${warehouseCode}, пропускаем операцию`);
-        return false;
+        this.logger.log(`   ✅ Создан: ${employeeId} (${fio})`);
+      } catch (err) {
+        // Игнорируем гонку при параллельной обработке складов
+        if (!err.message?.includes('UNIQUE') && !err.message?.includes('duplicate')) throw err;
+        this.logger.warn(`   ⚠️  Дубликат (параллельный insert): ${employeeId}`);
       }
     }
-
-    // Полный тип уже приходит из маппинга WCR как "Участок Тип" (напр. "ФС Коробочная комплектация")
-    const fullOperationType = operation.operationType;
-    
-    // Если operation_type не определен, пропускаем (нет тарифа)
-    if (!fullOperationType || fullOperationType === 'Неизвестно') {
-      return false;
-    }
-
-    // Найти тариф с нормативом (используем warehouse_code = 'ALL' для универсальных тарифов)
-    const tariffQuery = `
-      SELECT rate, norm_aei_per_hour FROM tariffs 
-      WHERE (warehouse_code = @warehouseCode OR warehouse_code = 'ALL')
-        AND operation_type = @operationType
-        AND @operationDate >= valid_from
-        AND (@operationDate <= valid_to OR valid_to IS NULL)
-        AND is_active = 1
-      ORDER BY 
-        CASE WHEN warehouse_code = @warehouseCode THEN 1 ELSE 2 END
-    `;
-    const tariff = await this.db.queryOne(tariffQuery, {
-      warehouseCode,
-      operationType: fullOperationType,
-      operationDate: operation.operationDate,
-    });
-
-    if (!tariff) {
-      this.logger.warn(`⚠️ Тариф не найден для: ${fullOperationType}`);
-      return false;  // Не сохраняем операцию без тарифа
-    }
-
-    // Вычисляем АЕИ по формуле: АЕИ = (Actdura / 60) * Норматив_АЕИ_в_час
-    const calculatedAEI = (operation.actdura / 60) * (tariff.norm_aei_per_hour || 0);
-    
-    // Округляем АЕИ до целого числа для сохранения в БД
-    const roundedAEI = Math.round(calculatedAEI);
-    
-    // Рассчитываем сумму: Сумма = АЕИ_округленное * Расценка
-    // Используем округленное значение для консистентности с отображением
-    const rate = tariff.rate || 0;
-    const amount = roundedAEI * rate;
-    
-    this.logger.debug(`💰 Расчет: ${operation.actdura.toFixed(2)}мин / 60 * ${tariff.norm_aei_per_hour} = ${calculatedAEI.toFixed(2)} ≈ ${roundedAEI} АЕИ * ${rate}₽ = ${amount.toFixed(2)}₽`);
-
-    // Проверка существования операции
-    const checkQuery = `
-      SELECT id FROM operations 
-      WHERE user_id = @userId 
-        AND operation_date = @operationDate
-        AND operation_type = @operationType
-        AND sap_order_id = @sapOrderId
-    `;
-    const existing = await this.db.queryOne(checkQuery, {
-      userId: user.id,
-      operationDate: operation.operationDate,
-      operationType: fullOperationType,
-      sapOrderId: operation.sapOrderId,
-    });
-
-    if (existing) {
-      // Обновление
-      const updateQuery = `
-        UPDATE operations 
-        SET count = @count, 
-            amount = @amount, 
-            participant_area = @participantArea,
-            actdura = @actdura,
-            updated_at = GETDATE()
-        WHERE id = @id
-      `;
-      await this.db.execute(updateQuery, {
-        id: existing.id,
-        count: roundedAEI,  // Округленные АЕИ
-        amount,
-        participantArea: operation.participantArea,
-        actdura: operation.actdura,
-      });
-    } else {
-      // Вставка
-      const insertQuery = `
-        INSERT INTO operations 
-        (user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id)
-        VALUES 
-        (@userId, @warehouseCode, @operationType, @participantArea, @count, @actdura, @operationDate, @amount, @sapOrderId)
-      `;
-      await this.db.execute(insertQuery, {
-        userId: user.id,
-        warehouseCode,
-        operationType: fullOperationType,
-        participantArea: operation.participantArea,
-        count: roundedAEI,  // Округленные АЕИ
-        actdura: operation.actdura,
-        operationDate: operation.operationDate,
-        amount,
-        sapOrderId: operation.sapOrderId,
-      });
-    }
-    
-    return true;  // Успешно сохранено
   }
 
-  /**
-   * Полная очистка: все операции, salary_summary и сотрудники (role = 'employee'). Админы не удаляются.
-   */
-  private async wipeOperationsAndEmployees(): Promise<{
-    operationsDeleted: number;
-    summaryDeleted: number;
-    usersDeleted: number;
-  }> {
-    const operationsDeleted = await this.db.execute(`DELETE FROM operations`);
-    const summaryDeleted = await this.db.execute(`DELETE FROM salary_summary`);
-    const usersDeleted = await this.db.execute(
-      `DELETE FROM users WHERE role = 'employee'`,
-    );
-    return { operationsDeleted, summaryDeleted, usersDeleted };
+  // ──────────────────────────────────────────────────────────────
+  // RETRY с экспоненциальным backoff
+  // ──────────────────────────────────────────────────────────────
+
+  private async withRetry<T>(
+    fn: () => Promise<T>,
+    opts: { label: string; maxAttempts?: number },
+  ): Promise<T> {
+    const max = opts.maxAttempts ?? 3;
+    let lastErr: any;
+
+    for (let attempt = 1; attempt <= max; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        if (attempt === max || !this.isRetryable(err)) throw err;
+
+        // Экспоненциальный backoff: 1s → 2s → 4s (max 30s)
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30_000);
+        this.logger.warn(
+          `⚠️  ${opts.label}: ${err.message || err.code} — retry ${attempt}/${max} через ${delay}ms`,
+        );
+        await this.sleep(delay);
+      }
+    }
+    throw lastErr;
   }
 
-  /**
-   * Удаление всех операций за период по всем складам
-   */
-  private async deleteAllOperationsForPeriod(startDate: Date, endDate: Date): Promise<number> {
-    const startStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
-    const endStr = endDate.toISOString().slice(0, 19).replace('T', ' ');
-    return await this.db.execute(
-      `DELETE FROM operations 
-       WHERE operation_date >= @startDate AND operation_date <= @endDate`,
-      { startDate: startStr, endDate: endStr },
+  private isRetryable(err: any): boolean {
+    return (
+      err?.code === 'ECONNRESET'   ||
+      err?.code === 'ETIMEDOUT'    ||
+      err?.code === 'ECONNABORTED' ||
+      String(err?.message).toLowerCase().includes('aborted') ||
+      String(err?.message).toLowerCase().includes('timeout')
     );
   }
 
-  /**
-   * Удаление операций за период по складу перед повторной загрузкой (только таблица operations)
-   */
+  // ──────────────────────────────────────────────────────────────
+  // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+  // ──────────────────────────────────────────────────────────────
+
+  private getDateChunks(start: Date, end: Date, chunkDays: number): DateChunk[] {
+    const chunks: DateChunk[] = [];
+    let cur = new Date(start.getTime());
+
+    while (cur <= end) {
+      const chunkEnd = new Date(cur.getTime());
+      chunkEnd.setUTCDate(chunkEnd.getUTCDate() + chunkDays - 1);
+      chunkEnd.setUTCHours(23, 59, 59, 999);
+      if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+
+      chunks.push({ startDate: new Date(cur), endDate: new Date(chunkEnd) });
+      cur = new Date(chunkEnd.getTime() + 1);
+      cur.setUTCHours(0, 0, 0, 0);
+    }
+
+    return chunks;
+  }
+
+  private buildODataFilter(warehouseCode: string, startDate: Date, endDate: Date): string {
+    const fmt = (d: Date) => d.toISOString().split('.')[0];
+    return (
+      `$filter=(Lgnum eq '${warehouseCode}'` +
+      ` and (ConfirmedDate ge datetime'${fmt(startDate)}'` +
+      ` and ConfirmedDate le datetime'${fmt(endDate)}'))`
+    );
+  }
+
   private async deleteOperationsForPeriod(
     warehouseCode: string,
     startDate: Date,
     endDate: Date,
-  ): Promise<void> {
-    const startStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
-    const endStr = endDate.toISOString().slice(0, 19).replace('T', ' ');
-
-    const deletedOps = await this.db.execute(
-      `DELETE FROM operations 
-       WHERE warehouse_code = @warehouseCode 
-         AND operation_date >= @startDate 
+  ): Promise<number> {
+    const start = startDate.toISOString().slice(0, 19).replace('T', ' ');
+    const end   = endDate.toISOString().slice(0, 19).replace('T', ' ');
+    return this.db.execute(
+      `DELETE FROM operations
+       WHERE warehouse_code = @warehouseCode
+         AND operation_date >= @startDate
          AND operation_date <= @endDate`,
-      { warehouseCode, startDate: startStr, endDate: endStr },
+      { warehouseCode, startDate: start, endDate: end },
     );
-    this.logger.log(`🗑️ Удалено операций по складу ${warehouseCode}: ${deletedOps}`);
   }
 
-  /**
-   * Создание записи лога синхронизации
-   */
   private async createSyncLog(warehouseCode: string): Promise<number> {
-    const query = `
-      INSERT INTO sync_logs (warehouse_code, sync_start, status)
-      OUTPUT INSERTED.id
-      VALUES (@warehouseCode, GETDATE(), 'running')
-    `;
-    const result = await this.db.queryOne(query, { warehouseCode });
-    return result.id;
+    const result = await this.db.queryOne<{ id: number }>(
+      `INSERT INTO sync_logs (warehouse_code, sync_start, status)
+       OUTPUT INSERTED.id
+       VALUES (@warehouseCode, GETDATE(), 'running')`,
+      { warehouseCode },
+    );
+    return result!.id;
   }
 
-  /**
-   * Обновление лога синхронизации
-   */
   private async updateSyncLog(
     id: number,
     status: string,
     recordsProcessed: number,
     errorMessage?: string,
   ): Promise<void> {
-    const query = `
-      UPDATE sync_logs 
-      SET sync_end = GETDATE(), 
-          status = @status, 
-          records_processed = @recordsProcessed,
-          error_message = @errorMessage
-      WHERE id = @id
-    `;
-    await this.db.execute(query, {
-      id,
-      status,
-      recordsProcessed,
-      errorMessage: errorMessage || null,
-    });
+    await this.db.execute(
+      `UPDATE sync_logs
+       SET sync_end          = GETDATE(),
+           status            = @status,
+           records_processed = @recordsProcessed,
+           error_message     = @errorMessage
+       WHERE id = @id`,
+      { id, status, recordsProcessed, errorMessage: errorMessage ?? null },
+    );
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
   }
 }
-
