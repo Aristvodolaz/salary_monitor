@@ -1,5 +1,4 @@
 import { Box, Divider, Typography } from '@mui/material';
-import { TOKENS } from '../../theme';
 
 interface PageHeaderProps {
   title: string;
@@ -20,11 +19,11 @@ export const PageHeader = ({ title, subtitle, actions }: PageHeaderProps) => (
       }}
     >
       <Box>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: TOKENS.textPrimary, lineHeight: 1.2 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>
           {title}
         </Typography>
         {subtitle && (
-          <Typography variant="body2" sx={{ color: TOKENS.textSecondary, mt: 0.5 }}>
+          <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)', mt: 0.5 }}>
             {subtitle}
           </Typography>
         )}

@@ -11,7 +11,7 @@ import {
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { TrendingUp, TrendingDown, InfoOutlined } from '@mui/icons-material';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import CurrencyDisplay from './CurrencyDisplay';
 import { TOKENS } from '../theme';
 
@@ -25,6 +25,11 @@ interface SalaryChartProps {
 }
 
 const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамика заработка' }) => {
+  const muiTheme = useTheme();
+  const textSecondary = muiTheme.palette.text.secondary;
+  const borderColor = muiTheme.palette.divider;
+  const bgBase = muiTheme.palette.background.default;
+
   const chartData = data
     .filter((item) => item && item.total_amount !== null && item.total_amount !== undefined)
     .map((item) => ({
@@ -54,23 +59,23 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
       return (
         <Box
           sx={{
-            backgroundColor: TOKENS.bgElevated,
-            border: `1px solid ${TOKENS.border}`,
+            backgroundColor: 'var(--color-bg-elevated)',
+            border: '1px solid var(--color-border)',
             borderRadius: 2,
             p: 2,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
           }}
         >
           <Typography
             variant="body2"
-            sx={{ fontWeight: 600, mb: 1, color: TOKENS.textPrimary }}
+            sx={{ fontWeight: 600, mb: 1, color: 'var(--color-text-primary)' }}
           >
             {payload[0].payload.fullDate}
           </Typography>
           <Typography
             variant="body2"
             sx={{
-              color: TOKENS.gold,
+              color: 'var(--color-gold)',
               display: 'flex',
               alignItems: 'center',
               gap: 0.5,
@@ -80,7 +85,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
             Заработок: <CurrencyDisplay amount={payload[0].value} />
           </Typography>
           {payload[0].payload.operations > 0 && (
-            <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+            <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)' }}>
               Операций: {payload[0].payload.operations}
             </Typography>
           )}
@@ -106,7 +111,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
           >
             <Typography
               variant="h6"
-              sx={{ fontWeight: 600, color: TOKENS.textPrimary }}
+              sx={{ fontWeight: 600, color: 'var(--color-text-primary)' }}
             >
               {title}
             </Typography>
@@ -131,7 +136,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                     backgroundColor: trend.isPositive
                       ? alpha(TOKENS.success, 0.08)
                       : alpha(TOKENS.error, 0.08),
-                    color: trend.isPositive ? TOKENS.success : TOKENS.error,
+                    color: trend.isPositive ? 'var(--color-success)' : 'var(--color-error)',
                     fontWeight: 700,
                     fontSize: '0.8125rem',
                     cursor: 'help',
@@ -169,24 +174,24 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                     </defs>
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke={TOKENS.border}
+                      stroke={borderColor}
                       opacity={0.6}
                     />
                     <XAxis
                       dataKey="date"
-                      tick={{ fill: TOKENS.textSecondary, fontSize: 12, fontWeight: 500 }}
-                      stroke={TOKENS.border}
+                      tick={{ fill: textSecondary, fontSize: 12, fontWeight: 500 }}
+                      stroke={borderColor}
                     />
                     <YAxis
-                      tick={{ fill: TOKENS.textSecondary, fontSize: 12, fontWeight: 500 }}
-                      stroke={TOKENS.border}
+                      tick={{ fill: textSecondary, fontSize: 12, fontWeight: 500 }}
+                      stroke={borderColor}
                       tickFormatter={(value) => value.toLocaleString('ru-RU')}
                       label={{
                         value: 'K',
                         angle: 0,
                         position: 'top',
                         offset: 10,
-                        style: { fontSize: 13, fontWeight: 600, fill: TOKENS.textSecondary },
+                        style: { fontSize: 13, fontWeight: 600, fill: textSecondary },
                       }}
                     />
                     <Tooltip
@@ -207,14 +212,14 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                         r: 4,
                         fill: TOKENS.red,
                         strokeWidth: 2,
-                        stroke: TOKENS.bgBase,
+                        stroke: bgBase,
                         filter: 'url(#shadow)',
                       }}
                       activeDot={{
                         r: 7,
                         fill: TOKENS.gold,
                         strokeWidth: 3,
-                        stroke: TOKENS.bgBase,
+                        stroke: bgBase,
                         filter: 'url(#shadow)',
                       }}
                     />
@@ -224,7 +229,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
             </Fade>
           ) : (
             <Box sx={{ textAlign: 'center', py: 6 }}>
-              <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+              <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)' }}>
                 Нет данных для отображения
               </Typography>
             </Box>
@@ -237,7 +242,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                 justifyContent: 'space-around',
                 mt: 3,
                 pt: 3,
-                borderTop: `1px solid ${TOKENS.border}`,
+                borderTop: '1px solid var(--color-border)',
                 gap: { xs: 1, md: 2 },
               }}
             >
@@ -245,7 +250,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                 {
                   label: 'Максимум',
                   value: <CurrencyDisplay amount={Math.max(...chartData.map((d) => d.amount))} />,
-                  color: TOKENS.gold,
+                  colorVar: 'var(--color-gold)',
                 },
                 {
                   label: 'Средний',
@@ -254,19 +259,19 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                       amount={chartData.reduce((sum, d) => sum + d.amount, 0) / chartData.length}
                     />
                   ),
-                  color: TOKENS.textPrimary,
+                  colorVar: 'var(--color-text-primary)',
                 },
                 {
                   label: 'Дней',
                   value: chartData.length,
-                  color: TOKENS.textPrimary,
+                  colorVar: 'var(--color-text-primary)',
                 },
               ].map((stat, i) => (
                 <Box key={i} sx={{ textAlign: 'center', flex: 1 }}>
                   <Typography
                     sx={{
                       fontSize: '0.6875rem',
-                      color: TOKENS.textMuted,
+                      color: 'var(--color-text-muted)',
                       letterSpacing: '0.06em',
                       textTransform: 'uppercase',
                       fontWeight: 600,
@@ -278,9 +283,9 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                   <Typography
                     sx={{
                       fontWeight: 700,
-                      color: stat.color,
+                      color: stat.colorVar,
                       fontSize: { xs: '0.9375rem', md: '1.0625rem' },
-                      fontFamily: TOKENS.fontMono,
+                      fontFamily: 'var(--font-mono)',
                     }}
                   >
                     {stat.value}

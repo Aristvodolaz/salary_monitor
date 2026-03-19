@@ -118,8 +118,8 @@ const AdminPage = () => {
           <Grid item xs={12} sm={6} md={3} key={i}>
             <Box
               sx={{
-                backgroundColor: TOKENS.bgSurface,
-                border: `1px solid ${card.hero ? card.color : TOKENS.border}`,
+                backgroundColor: 'var(--color-bg-surface)',
+                border: `1px solid ${card.hero ? card.color : 'var(--color-border)'}`,
                 borderRadius: 2,
                 p: 2.5,
                 height: '100%',
@@ -150,7 +150,7 @@ const AdminPage = () => {
                     fontWeight: 600,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    color: TOKENS.textSecondary,
+                    color: 'var(--color-text-secondary)',
                   }}
                 >
                   {card.label}
@@ -160,8 +160,8 @@ const AdminPage = () => {
                 sx={{
                   fontSize: card.hero ? '1.5rem' : '1.75rem',
                   fontWeight: 700,
-                  color: card.hero ? card.color : TOKENS.textPrimary,
-                  fontFamily: TOKENS.fontMono,
+                  color: card.hero ? card.color : 'var(--color-text-primary)',
+                  fontFamily: 'var(--font-mono)',
                   lineHeight: 1.2,
                 }}
               >
@@ -181,8 +181,8 @@ const AdminPage = () => {
           flexWrap: 'wrap',
           mb: 3,
           p: 2,
-          backgroundColor: TOKENS.bgSurface,
-          border: `1px solid ${TOKENS.border}`,
+          backgroundColor: 'var(--color-bg-surface)',
+          border: '1px solid var(--color-border)',
           borderRadius: 2,
         }}
       >
@@ -222,14 +222,14 @@ const AdminPage = () => {
       {/* Employee salary table */}
       <Box
         sx={{
-          backgroundColor: TOKENS.bgSurface,
-          border: `1px solid ${TOKENS.border}`,
+          backgroundColor: 'var(--color-bg-surface)',
+          border: '1px solid var(--color-border)',
           borderRadius: 2,
           overflow: 'hidden',
         }}
       >
         <Box sx={{ px: 3, pt: 2.5, pb: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, color: TOKENS.textPrimary }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
             Зарплаты сотрудников за период
           </Typography>
         </Box>
@@ -250,7 +250,7 @@ const AdminPage = () => {
                   <TableCell align="right">Раб. дней</TableCell>
                   <TableCell align="right">Операций</TableCell>
                   <TableCell align="right">АЕИ</TableCell>
-                  <TableCell align="right" sx={{ color: `${TOKENS.gold} !important` }}>
+                  <TableCell align="right" sx={{ color: 'var(--color-gold) !important' }}>
                     Сумма
                   </TableCell>
                 </TableRow>
@@ -265,7 +265,7 @@ const AdminPage = () => {
                             width: 34,
                             height: 34,
                             borderRadius: '50%',
-                            backgroundColor: alpha(TOKENS.red, 0.12),
+                            backgroundColor: 'var(--color-red-subtle)',
                             border: `1px solid ${alpha(TOKENS.red, 0.25)}`,
                             display: 'flex',
                             alignItems: 'center',
@@ -274,22 +274,22 @@ const AdminPage = () => {
                             fontWeight: 700,
                             color: TOKENS.red,
                             flexShrink: 0,
-                            fontFamily: TOKENS.fontDisplay,
+                            fontFamily: 'var(--font-display)',
                           }}
                         >
                           {getInitials(emp.fio)}
                         </Box>
                         <Box>
                           <Typography
-                            sx={{ fontSize: '0.9375rem', fontWeight: 600, color: TOKENS.textPrimary }}
+                            sx={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text-primary)' }}
                           >
                             {emp.fio}
                           </Typography>
                           <Typography
                             sx={{
                               fontSize: '0.75rem',
-                              color: TOKENS.textSecondary,
-                              fontFamily: TOKENS.fontMono,
+                              color: 'var(--color-text-secondary)',
+                              fontFamily: 'var(--font-mono)',
                             }}
                           >
                             ШК: {emp.employee_id}
@@ -297,27 +297,27 @@ const AdminPage = () => {
                         </Box>
                       </Box>
                     </TableCell>
-                    <TableCell align="right" sx={{ fontFamily: TOKENS.fontMono }}>
+                    <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)' }}>
                       {emp.work_days}
                     </TableCell>
-                    <TableCell align="right" sx={{ fontFamily: TOKENS.fontMono }}>
+                    <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)' }}>
                       {emp.total_operations}
                     </TableCell>
-                    <TableCell align="right" sx={{ fontFamily: TOKENS.fontMono }}>
+                    <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)' }}>
                       {emp.total_aei}
                     </TableCell>
                     <TableCell align="right">
                       <Box
                         component="span"
                         sx={{
-                          color: TOKENS.gold,
+                          color: 'var(--color-gold)',
                           fontWeight: 700,
-                          fontFamily: TOKENS.fontMono,
+                          fontFamily: 'var(--font-mono)',
                           fontSize: '0.9375rem',
                           px: 1.5,
                           py: 0.5,
                           borderRadius: 1,
-                          backgroundColor: alpha(TOKENS.gold, 0.08),
+                          backgroundColor: 'var(--color-gold-muted)',
                           display: 'inline-block',
                         }}
                       >

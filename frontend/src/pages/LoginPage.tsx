@@ -31,7 +31,7 @@ const LoginPage = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        backgroundColor: TOKENS.bgBase,
+        backgroundColor: 'var(--color-bg-base)',
         display: 'grid',
         gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
       }}
@@ -71,7 +71,7 @@ const LoginPage = () => {
             fontSize: '2.5rem',
             fontWeight: 800,
             color: 'white',
-            fontFamily: TOKENS.fontDisplay,
+            fontFamily: 'var(--font-display)',
             mb: 4,
             boxShadow: `0 16px 40px ${alpha(TOKENS.red, 0.4)}`,
           }}
@@ -83,7 +83,7 @@ const LoginPage = () => {
           variant="h2"
           sx={{
             fontWeight: 800,
-            color: TOKENS.textPrimary,
+            color: 'var(--color-text-primary)',
             mb: 1,
             textAlign: 'center',
             letterSpacing: '-0.02em',
@@ -94,7 +94,7 @@ const LoginPage = () => {
         <Typography
           variant="h5"
           sx={{
-            color: TOKENS.textSecondary,
+            color: 'var(--color-text-secondary)',
             mb: 2,
             fontWeight: 400,
             textAlign: 'center',
@@ -105,7 +105,7 @@ const LoginPage = () => {
         <Typography
           variant="body1"
           sx={{
-            color: TOKENS.textMuted,
+            color: 'var(--color-text-muted)',
             textAlign: 'center',
             maxWidth: 320,
             lineHeight: 1.7,
@@ -122,7 +122,7 @@ const LoginPage = () => {
             right: 48,
             width: 120,
             height: 120,
-            backgroundImage: `radial-gradient(circle, ${alpha(TOKENS.border, 0.8)} 1px, transparent 1px)`,
+            backgroundImage: `radial-gradient(circle, var(--color-border) 1px, transparent 1px)`,
             backgroundSize: '16px 16px',
             opacity: 0.5,
           }}
@@ -137,8 +137,8 @@ const LoginPage = () => {
           justifyContent: 'center',
           alignItems: 'center',
           p: { xs: 3, sm: 6 },
-          backgroundColor: { lg: TOKENS.bgSurface },
-          borderLeft: { lg: `1px solid ${TOKENS.border}` },
+          backgroundColor: { lg: 'var(--color-bg-surface)' },
+          borderLeft: { lg: '1px solid var(--color-border)' },
         }}
       >
         {/* Mobile logo */}
@@ -173,13 +173,13 @@ const LoginPage = () => {
           </Typography>
         </Box>
 
-        {/* Form card with glassmorphism */}
+        {/* Form card */}
         <Box
           sx={{
             width: '100%',
             maxWidth: 400,
-            backgroundColor: alpha(TOKENS.bgElevated, 0.7),
-            border: `1px solid ${TOKENS.border}`,
+            backgroundColor: 'var(--color-bg-elevated)',
+            border: '1px solid var(--color-border)',
             borderRadius: 3,
             p: { xs: 3, sm: 4 },
             backdropFilter: 'blur(12px)',
@@ -193,11 +193,11 @@ const LoginPage = () => {
         >
           <Typography
             variant="h5"
-            sx={{ fontWeight: 700, mb: 0.5, color: TOKENS.textPrimary }}
+            sx={{ fontWeight: 700, mb: 0.5, color: 'var(--color-text-primary)' }}
           >
             Вход в систему
           </Typography>
-          <Typography variant="body2" sx={{ color: TOKENS.textSecondary, mb: 3 }}>
+          <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)', mb: 3 }}>
             Введите или отсканируйте ШК сотрудника
           </Typography>
 
@@ -236,8 +236,8 @@ const LoginPage = () => {
               display: 'block',
               mt: 3,
               textAlign: 'center',
-              color: TOKENS.textMuted,
-              fontFamily: TOKENS.fontMono,
+              color: 'var(--color-text-muted)',
+              fontFamily: 'var(--font-mono)',
               fontSize: '0.75rem',
             }}
           >

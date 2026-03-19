@@ -1,6 +1,5 @@
 import { Box, Fade, Typography } from '@mui/material';
 import InboxIcon from '@mui/icons-material/Inbox';
-import { TOKENS } from '../../theme';
 
 interface EmptyStateProps {
   icon?: React.ReactNode;
@@ -27,24 +26,24 @@ export const EmptyState = ({ icon, title, description, action }: EmptyStateProps
           width: 64,
           height: 64,
           borderRadius: '50%',
-          backgroundColor: `rgba(37, 42, 61, 0.6)`,
+          backgroundColor: 'var(--color-bg-elevated)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           mb: 3,
           '& .MuiSvgIcon-root': {
             fontSize: 28,
-            color: TOKENS.textMuted,
+            color: 'var(--color-text-muted)',
           },
         }}
       >
         {icon ?? <InboxIcon />}
       </Box>
-      <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, color: TOKENS.textPrimary }}>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, color: 'var(--color-text-primary)' }}>
         {title}
       </Typography>
       {description && (
-        <Typography variant="body2" sx={{ color: TOKENS.textSecondary, mb: action ? 3 : 0, maxWidth: 320 }}>
+        <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)', mb: action ? 3 : 0, maxWidth: 320 }}>
           {description}
         </Typography>
       )}

@@ -39,7 +39,7 @@ const CoinBadge = ({ size }: CoinBadgeProps) => {
         verticalAlign: 'middle',
         position: 'relative',
         top: '-0.05em',
-        fontFamily: TOKENS.fontDisplay,
+        fontFamily: 'var(--font-display)',
       }}
     >
       <Box component="span" sx={{ fontSize: s.fs, lineHeight: 1 }}>
@@ -66,7 +66,7 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
         sx={{
           display: 'inline-flex',
           alignItems: 'center',
-          fontFamily: TOKENS.fontMono,
+          fontFamily: 'var(--font-mono)',
           fontSize: '2rem',
           fontWeight: 700,
           lineHeight: 1,
@@ -86,7 +86,7 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
         sx={{
           display: 'inline-flex',
           alignItems: 'center',
-          fontFamily: TOKENS.fontMono,
+          fontFamily: 'var(--font-mono)',
           fontSize: '0.875rem',
           fontWeight: 500,
         }}
@@ -104,7 +104,7 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
       sx={{
         display: 'inline-flex',
         alignItems: 'center',
-        fontFamily: TOKENS.fontMono,
+        fontFamily: 'var(--font-mono)',
         fontWeight: 500,
       }}
     >

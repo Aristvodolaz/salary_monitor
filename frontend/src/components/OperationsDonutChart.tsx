@@ -1,8 +1,7 @@
 import { Card, CardContent, Typography, Box, Grow } from '@mui/material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import CurrencyDisplay from './CurrencyDisplay';
-import { TOKENS } from '../theme';
 
 interface OperationsDonutChartProps {
   data: Array<{
@@ -29,6 +28,10 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
   data,
   period = 'текущий месяц',
 }) => {
+  const muiTheme = useTheme();
+  const textSecondary = muiTheme.palette.text.secondary;
+  const fontMono = '"JetBrains Mono", "Fira Code", monospace';
+
   const chartData = data
     .filter(
       (item) =>
@@ -52,11 +55,11 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
       return (
         <Box
           sx={{
-            backgroundColor: TOKENS.bgElevated,
+            backgroundColor: 'var(--color-bg-elevated)',
             border: `2px solid ${d.color}`,
             borderRadius: 2,
             p: 2,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
             minWidth: 180,
           }}
         >
@@ -68,14 +71,14 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
           </Typography>
           <Typography
             variant="body2"
-            sx={{ mb: 0.5, display: 'flex', alignItems: 'center', gap: 0.5, color: TOKENS.textPrimary }}
+            sx={{ mb: 0.5, display: 'flex', alignItems: 'center', gap: 0.5, color: 'var(--color-text-primary)' }}
           >
             <CurrencyDisplay amount={d.value} />
-            <Box component="span" sx={{ color: TOKENS.textSecondary, ml: 0.5 }}>
+            <Box component="span" sx={{ color: 'var(--color-text-secondary)', ml: 0.5 }}>
               ({percentage}%)
             </Box>
           </Typography>
-          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+          <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)' }}>
             Операций: {d.operations} · АЕИ: {d.aei}
           </Typography>
         </Box>
@@ -96,10 +99,10 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
       <text
         x={x}
         y={y}
-        fill={TOKENS.textSecondary}
+        fill={textSecondary}
         textAnchor={x > cx ? 'start' : 'end'}
         dominantBaseline="central"
-        style={{ fontSize: '12px', fontWeight: 600, fontFamily: TOKENS.fontMono }}
+        style={{ fontSize: '12px', fontWeight: 600, fontFamily: fontMono }}
       >
         {`${(percent * 100).toFixed(0)}%`}
       </text>
@@ -111,10 +114,10 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
       <Card>
         <CardContent sx={{ p: { xs: 2, md: 3 } }}>
           <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: TOKENS.textPrimary }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
               Расценки за операции
             </Typography>
-            <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>
+            <Typography variant="caption" sx={{ color: 'var(--color-text-secondary)' }}>
               Период: {period}
             </Typography>
           </Box>
@@ -179,7 +182,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
                       py: 1.25,
                       mb: 0.75,
                       borderRadius: 1.5,
-                      border: `1px solid ${TOKENS.border}`,
+                      border: '1px solid var(--color-border)',
                       transition: 'all 200ms ease',
                       cursor: 'default',
                       '&:hover': {
@@ -202,13 +205,13 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
                       <Box>
                         <Typography
                           variant="body2"
-                          sx={{ fontWeight: 600, color: TOKENS.textPrimary, lineHeight: 1.3 }}
+                          sx={{ fontWeight: 600, color: 'var(--color-text-primary)', lineHeight: 1.3 }}
                         >
                           {item.name}
                         </Typography>
                         <Typography
                           variant="caption"
-                          sx={{ color: TOKENS.textSecondary, fontSize: '0.75rem' }}
+                          sx={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}
                         >
                           {item.operations} операций
                         </Typography>
@@ -218,7 +221,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
                       sx={{
                         fontWeight: 700,
                         color: item.color,
-                        fontFamily: TOKENS.fontMono,
+                        fontFamily: 'var(--font-mono)',
                         fontSize: '0.9375rem',
                         whiteSpace: 'nowrap',
                         ml: 1,
@@ -232,7 +235,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
             </Box>
           ) : (
             <Box sx={{ textAlign: 'center', py: 6 }}>
-              <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+              <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)' }}>
                 Нет данных для отображения
               </Typography>
             </Box>

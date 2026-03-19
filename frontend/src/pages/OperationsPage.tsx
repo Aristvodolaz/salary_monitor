@@ -12,17 +12,149 @@ import {
   Alert,
   TextField,
   Button,
+  useMediaQuery,
 } from '@mui/material';
 import { Search, FilterAltOff } from '@mui/icons-material';
-import { alpha } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import { operationsAPI } from '../services/api';
 import { format } from 'date-fns';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import { PageHeader } from '../components/ui/PageHeader';
 import { SkeletonTable } from '../components/ui/SkeletonTable';
 import { EmptyState } from '../components/ui/EmptyState';
-import { TOKENS } from '../theme';
+// ── Operation Card (mobile view) ───────────────────────────────────────────────
+interface OperationCardProps {
+  op: {
+    operation_id: string | number;
+    operation_date: string;
+    operation_type: string;
+    aei_count: number;
+    rate: number;
+    base_amount: number;
+  };
+}
 
+const OperationCard = ({ op }: OperationCardProps) => (
+  <Box
+    sx={{
+      backgroundColor: 'var(--color-bg-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 2,
+      p: 2,
+      transition: 'border-color 150ms ease',
+      '&:hover': { borderColor: 'var(--color-border-hover)' },
+    }}
+  >
+    {/* Row 1: Date + Amount */}
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+      <Typography
+        sx={{
+          fontSize: '0.8125rem',
+          fontFamily: 'var(--font-mono)',
+          color: 'var(--color-text-secondary)',
+          lineHeight: 1.4,
+        }}
+      >
+        {format(new Date(op.operation_date), 'dd.MM.yyyy HH:mm')}
+      </Typography>
+      <Box
+        component="span"
+        sx={{
+          color: 'var(--color-gold)',
+          fontWeight: 700,
+          fontFamily: 'var(--font-mono)',
+          fontSize: '1rem',
+          px: 1.5,
+          py: 0.25,
+          borderRadius: 1,
+          backgroundColor: 'var(--color-gold-muted)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          ml: 1,
+          flexShrink: 0,
+        }}
+      >
+        <CurrencyDisplay amount={op.base_amount || 0} variant="compact" />
+      </Box>
+    </Box>
+
+    {/* Row 2: Operation type */}
+    <Typography
+      sx={{
+        fontSize: '0.9375rem',
+        fontWeight: 600,
+        color: 'var(--color-text-primary)',
+        mb: 1.25,
+        lineHeight: 1.3,
+      }}
+    >
+      {op.operation_type}
+    </Typography>
+
+    {/* Row 3: AEI + Rate */}
+    <Box sx={{ display: 'flex', gap: 3 }}>
+      <Box>
+        <Typography
+          sx={{
+            fontSize: '0.625rem',
+            color: 'var(--color-text-muted)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            mb: 0.25,
+          }}
+        >
+          АЕИ
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+          {op.aei_count}
+        </Typography>
+      </Box>
+      <Box>
+        <Typography
+          sx={{
+            fontSize: '0.625rem',
+            color: 'var(--color-text-muted)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            mb: 0.25,
+          }}
+        >
+          Расценка
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+          <CurrencyDisplay amount={op.rate || 0} variant="compact" />
+        </Typography>
+      </Box>
+    </Box>
+  </Box>
+);
+
+// ── Skeleton Card (mobile loading) ─────────────────────────────────────────────
+const SkeletonOperationCards = () => (
+  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    {Array.from({ length: 8 }).map((_, i) => (
+      <Box
+        key={i}
+        sx={{
+          backgroundColor: 'var(--color-bg-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 2,
+          p: 2,
+          height: 110,
+          animation: 'pulse 1.5s ease-in-out infinite',
+          '@keyframes pulse': {
+            '0%, 100%': { opacity: 1 },
+            '50%': { opacity: 0.5 },
+          },
+        }}
+      />
+    ))}
+  </Box>
+);
+
+// ── Operations Page ────────────────────────────────────────────────────────────
 const OperationsPage = () => {
   const [operations, setOperations] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -32,6 +164,9 @@ const OperationsPage = () => {
   const [error, setError] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   useEffect(() => {
     loadOperations();
@@ -67,7 +202,6 @@ const OperationsPage = () => {
     setStartDate('');
     setEndDate('');
     setPage(0);
-    // trigger reload after state update
     setTimeout(loadOperations, 0);
   };
 
@@ -77,17 +211,18 @@ const OperationsPage = () => {
     <Box>
       <PageHeader title="Мои операции" />
 
-      {/* Inline filter bar */}
+      {/* Filter bar — stacks on mobile */}
       <Box
         sx={{
           display: 'flex',
           gap: 2,
-          alignItems: 'center',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          flexDirection: { xs: 'column', sm: 'row' },
           flexWrap: 'wrap',
           mb: 3,
           p: 2,
-          backgroundColor: TOKENS.bgSurface,
-          border: `1px solid ${TOKENS.border}`,
+          backgroundColor: 'var(--color-bg-surface)',
+          border: '1px solid var(--color-border)',
           borderRadius: 2,
         }}
       >
@@ -98,7 +233,7 @@ const OperationsPage = () => {
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
           InputLabelProps={{ shrink: true }}
-          sx={{ width: 160 }}
+          sx={{ width: { xs: '100%', sm: 160 } }}
         />
         <TextField
           type="date"
@@ -107,23 +242,25 @@ const OperationsPage = () => {
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
           InputLabelProps={{ shrink: true }}
-          sx={{ width: 160 }}
+          sx={{ width: { xs: '100%', sm: 160 } }}
         />
-        <Button variant="contained" size="small" startIcon={<Search />} onClick={handleSearch}>
-          Применить
-        </Button>
-        {hasFilter && (
-          <Button
-            variant="text"
-            size="small"
-            startIcon={<FilterAltOff />}
-            onClick={handleClear}
-          >
-            Сбросить
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button variant="contained" size="small" startIcon={<Search />} onClick={handleSearch}>
+            Применить
           </Button>
-        )}
-        <Box sx={{ ml: 'auto' }}>
-          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+          {hasFilter && (
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<FilterAltOff />}
+              onClick={handleClear}
+            >
+              Сбросить
+            </Button>
+          )}
+        </Box>
+        <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
+          <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)' }}>
             {loading ? '...' : `Найдено: ${total}`}
           </Typography>
         </Box>
@@ -131,81 +268,122 @@ const OperationsPage = () => {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <Box
-        sx={{
-          backgroundColor: TOKENS.bgSurface,
-          border: `1px solid ${TOKENS.border}`,
-          borderRadius: 2,
-          overflow: 'hidden',
-        }}
-      >
-        {loading ? (
-          <SkeletonTable rows={10} columns={5} />
-        ) : operations.length === 0 ? (
-          <EmptyState
-            title="Операции не найдены"
-            description={hasFilter ? 'Попробуйте изменить диапазон дат' : 'У вас пока нет операций'}
-            action={
-              hasFilter ? (
-                <Button variant="outlined" size="small" onClick={handleClear}>
-                  Сбросить фильтр
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
-            <Table stickyHeader>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Дата</TableCell>
-                  <TableCell>Операция</TableCell>
-                  <TableCell align="right">АЕИ</TableCell>
-                  <TableCell align="right">Расценка</TableCell>
-                  <TableCell align="right" sx={{ color: `${TOKENS.gold} !important` }}>
-                    Сумма
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {operations.map((op) => (
-                  <TableRow key={op.operation_id}>
-                    <TableCell sx={{ fontFamily: TOKENS.fontMono, fontSize: '0.875rem' }}>
-                      {format(new Date(op.operation_date), 'dd.MM.yyyy HH:mm')}
-                    </TableCell>
-                    <TableCell>{op.operation_type}</TableCell>
-                    <TableCell align="right" sx={{ fontFamily: TOKENS.fontMono }}>
-                      {op.aei_count}
-                    </TableCell>
-                    <TableCell align="right">
-                      <CurrencyDisplay amount={op.rate || 0} variant="compact" />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Box
-                        component="span"
-                        sx={{
-                          color: TOKENS.gold,
-                          fontWeight: 700,
-                          fontFamily: TOKENS.fontMono,
-                          fontSize: '0.9375rem',
-                          px: 1.5,
-                          py: 0.5,
-                          borderRadius: 1,
-                          backgroundColor: alpha(TOKENS.gold, 0.08),
-                          display: 'inline-block',
-                        }}
-                      >
-                        <CurrencyDisplay amount={op.base_amount || 0} variant="compact" />
-                      </Box>
+      {/* ── MOBILE: Card list ── */}
+      {isMobile && (
+        <>
+          {loading ? (
+            <SkeletonOperationCards />
+          ) : operations.length === 0 ? (
+            <EmptyState
+              title="Операции не найдены"
+              description={hasFilter ? 'Попробуйте изменить диапазон дат' : 'У вас пока нет операций'}
+              action={
+                hasFilter ? (
+                  <Button variant="outlined" size="small" onClick={handleClear}>
+                    Сбросить фильтр
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {operations.map((op) => (
+                <OperationCard key={op.operation_id} op={op} />
+              ))}
+            </Box>
+          )}
+        </>
+      )}
+
+      {/* ── DESKTOP: Table ── */}
+      {!isMobile && (
+        <Box
+          sx={{
+            backgroundColor: 'var(--color-bg-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 2,
+            overflow: 'hidden',
+          }}
+        >
+          {loading ? (
+            <SkeletonTable rows={10} columns={5} />
+          ) : operations.length === 0 ? (
+            <EmptyState
+              title="Операции не найдены"
+              description={hasFilter ? 'Попробуйте изменить диапазон дат' : 'У вас пока нет операций'}
+              action={
+                hasFilter ? (
+                  <Button variant="outlined" size="small" onClick={handleClear}>
+                    Сбросить фильтр
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Дата</TableCell>
+                    <TableCell>Операция</TableCell>
+                    <TableCell align="right">АЕИ</TableCell>
+                    <TableCell align="right">Расценка</TableCell>
+                    <TableCell align="right" sx={{ color: 'var(--color-gold) !important' }}>
+                      Сумма
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
+                </TableHead>
+                <TableBody>
+                  {operations.map((op) => (
+                    <TableRow key={op.operation_id}>
+                      <TableCell sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem' }}>
+                        {format(new Date(op.operation_date), 'dd.MM.yyyy HH:mm')}
+                      </TableCell>
+                      <TableCell>{op.operation_type}</TableCell>
+                      <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)' }}>
+                        {op.aei_count}
+                      </TableCell>
+                      <TableCell align="right">
+                        <CurrencyDisplay amount={op.rate || 0} variant="compact" />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Box
+                          component="span"
+                          sx={{
+                            color: 'var(--color-gold)',
+                            fontWeight: 700,
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.9375rem',
+                            px: 1.5,
+                            py: 0.5,
+                            borderRadius: 1,
+                            backgroundColor: 'var(--color-gold-muted)',
+                            display: 'inline-block',
+                          }}
+                        >
+                          <CurrencyDisplay amount={op.base_amount || 0} variant="compact" />
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Box>
+      )}
 
-        {!loading && operations.length > 0 && (
+      {/* Pagination — shared between both views */}
+      {!loading && operations.length > 0 && (
+        <Box
+          sx={{
+            backgroundColor: 'var(--color-bg-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: isMobile ? 2 : '0 0 8px 8px',
+            mt: isMobile ? 1 : 0,
+            borderTop: isMobile ? undefined : 'none',
+          }}
+        >
           <TablePagination
             component="div"
             count={total}
@@ -216,11 +394,12 @@ const OperationsPage = () => {
               setRowsPerPage(parseInt(e.target.value, 10));
               setPage(0);
             }}
-            labelRowsPerPage="Строк:"
-            rowsPerPageOptions={[10, 25, 50]}
+            labelRowsPerPage={isMobile ? '' : 'Строк:'}
+            rowsPerPageOptions={isMobile ? [10, 25] : [10, 25, 50]}
+            sx={{ color: 'var(--color-text-secondary)' }}
           />
-        )}
-      </Box>
+        </Box>
+      )}
     </Box>
   );
 };

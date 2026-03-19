@@ -10,19 +10,24 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  useTheme,
-  useMediaQuery,
+  BottomNavigation,
+  BottomNavigationAction,
+  Paper,
+  Tooltip,
+  Divider,
 } from '@mui/material';
 import {
-  Menu as MenuIcon,
   Dashboard,
   ListAlt,
   AdminPanelSettings,
   Logout,
+  LightMode,
+  DarkMode,
+  SettingsBrightness,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
-import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useThemeContext } from '../context/ThemeContext';
 import { TOKENS } from '../theme';
 
 const SIDEBAR_WIDTH = 240;
@@ -35,13 +40,34 @@ const getInitials = (fio: string) =>
     .join('')
     .toUpperCase();
 
+// ── Theme Toggle Button ────────────────────────────────────────────────────────
+const ThemeToggleButton = () => {
+  const { mode, toggleMode } = useThemeContext();
+
+  const icon =
+    mode === 'dark' ? <LightMode fontSize="small" /> :
+    mode === 'light' ? <SettingsBrightness fontSize="small" /> :
+    <DarkMode fontSize="small" />;
+
+  const tooltip =
+    mode === 'dark' ? 'Светлая тема' :
+    mode === 'light' ? 'Системная тема' :
+    'Тёмная тема';
+
+  return (
+    <Tooltip title={tooltip}>
+      <IconButton onClick={toggleMode} size="small" sx={{ color: 'var(--color-text-secondary)' }}>
+        {icon}
+      </IconButton>
+    </Tooltip>
+  );
+};
+
+// ── Layout ─────────────────────────────────────────────────────────────────────
 const Layout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const theme = useTheme();
-  useMediaQuery(theme.breakpoints.down('md'));
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   const menuItems = [
     { text: 'Дашборд', icon: <Dashboard />, path: '/' },
@@ -73,7 +99,7 @@ const Layout = () => {
           display: 'flex',
           alignItems: 'center',
           px: 2.5,
-          borderBottom: `1px solid ${TOKENS.border}`,
+          borderBottom: '1px solid var(--color-border)',
           flexShrink: 0,
         }}
       >
@@ -89,7 +115,7 @@ const Layout = () => {
             color: 'white',
             fontWeight: 800,
             fontSize: '0.875rem',
-            fontFamily: TOKENS.fontDisplay,
+            fontFamily: 'var(--font-display)',
             flexShrink: 0,
             boxShadow: `0 2px 8px ${alpha(TOKENS.red, 0.4)}`,
           }}
@@ -101,7 +127,7 @@ const Layout = () => {
             ml: 1.5,
             fontWeight: 700,
             fontSize: '1rem',
-            color: TOKENS.textPrimary,
+            color: 'var(--color-text-primary)',
             letterSpacing: '-0.01em',
           }}
         >
@@ -116,10 +142,7 @@ const Layout = () => {
             <ListItemButton
               key={item.path}
               selected={location.pathname === item.path}
-              onClick={() => {
-                navigate(item.path);
-                setMobileOpen(false);
-              }}
+              onClick={() => navigate(item.path)}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
               <ListItemText primary={item.text} />
@@ -128,10 +151,21 @@ const Layout = () => {
         </List>
       </Box>
 
+      {/* Theme toggle */}
+      <Box sx={{ px: 2, pb: 1 }}>
+        <Divider sx={{ mb: 1 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+            Тема
+          </Typography>
+          <ThemeToggleButton />
+        </Box>
+      </Box>
+
       {/* User info + logout */}
       <Box
         sx={{
-          borderTop: `1px solid ${TOKENS.border}`,
+          borderTop: '1px solid var(--color-border)',
           p: 2,
           flexShrink: 0,
         }}
@@ -151,7 +185,7 @@ const Layout = () => {
                 fontWeight: 700,
                 color: 'white',
                 flexShrink: 0,
-                fontFamily: TOKENS.fontDisplay,
+                fontFamily: 'var(--font-display)',
               }}
             >
               {getInitials(user.fio)}
@@ -161,7 +195,7 @@ const Layout = () => {
                 sx={{
                   fontSize: '0.875rem',
                   fontWeight: 600,
-                  color: TOKENS.textPrimary,
+                  color: 'var(--color-text-primary)',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -172,8 +206,8 @@ const Layout = () => {
               <Typography
                 sx={{
                   fontSize: '0.75rem',
-                  color: TOKENS.textSecondary,
-                  fontFamily: TOKENS.fontMono,
+                  color: 'var(--color-text-secondary)',
+                  fontFamily: 'var(--font-mono)',
                 }}
               >
                 ШК: {user.employeeId}
@@ -231,23 +265,7 @@ const Layout = () => {
         {sidebarContent}
       </Drawer>
 
-      {/* Mobile temporary drawer */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': {
-            width: SIDEBAR_WIDTH,
-          },
-        }}
-        ModalProps={{ keepMounted: true }}
-      >
-        {sidebarContent}
-      </Drawer>
-
-      {/* Mobile top AppBar */}
+      {/* Mobile top AppBar — logo + title + theme toggle (no hamburger) */}
       <AppBar
         position="fixed"
         sx={{
@@ -256,15 +274,7 @@ const Layout = () => {
           right: 0,
         }}
       >
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={() => setMobileOpen(true)}
-            sx={{ mr: 2 }}
-          >
-            <MenuIcon />
-          </IconButton>
+        <Toolbar sx={{ minHeight: 56, px: 2 }}>
           <Box
             sx={{
               width: 28,
@@ -278,6 +288,7 @@ const Layout = () => {
               fontWeight: 800,
               fontSize: '0.75rem',
               mr: 1.5,
+              flexShrink: 0,
             }}
           >
             К
@@ -285,6 +296,7 @@ const Layout = () => {
           <Typography variant="h6" sx={{ fontWeight: 700, flexGrow: 1, fontSize: '1rem' }}>
             BalanceMonitor
           </Typography>
+          <ThemeToggleButton />
         </Toolbar>
       </AppBar>
 
@@ -294,7 +306,8 @@ const Layout = () => {
         sx={{
           flexGrow: 1,
           ml: { xs: 0, md: `${SIDEBAR_WIDTH}px` },
-          mt: { xs: '64px', md: 0 },
+          mt: { xs: '56px', md: 0 },
+          mb: { xs: '56px', md: 0 },
           p: { xs: 2, sm: 3 },
           minHeight: '100vh',
           backgroundColor: 'background.default',
@@ -302,6 +315,56 @@ const Layout = () => {
       >
         <Outlet />
       </Box>
+
+      {/* Mobile bottom navigation */}
+      <Paper
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: (theme) => theme.zIndex.appBar,
+          borderTop: '1px solid var(--color-border)',
+          borderRadius: 0,
+        }}
+        elevation={0}
+      >
+        <BottomNavigation
+          value={location.pathname}
+          onChange={(_, newPath) => {
+            if (newPath !== '__logout__') navigate(newPath);
+          }}
+        >
+          <BottomNavigationAction
+            label="Дашборд"
+            icon={<Dashboard />}
+            value="/"
+          />
+          <BottomNavigationAction
+            label="Операции"
+            icon={<ListAlt />}
+            value="/operations"
+          />
+          {user?.role === 'admin' && (
+            <BottomNavigationAction
+              label="Админ"
+              icon={<AdminPanelSettings />}
+              value="/admin"
+            />
+          )}
+          <BottomNavigationAction
+            label="Выйти"
+            icon={<Logout />}
+            value="__logout__"
+            onClick={handleLogout}
+            sx={{
+              color: `${alpha(TOKENS.error, 0.8)} !important`,
+              '&.Mui-selected': { color: `${TOKENS.error} !important` },
+            }}
+          />
+        </BottomNavigation>
+      </Paper>
     </Box>
   );
 };

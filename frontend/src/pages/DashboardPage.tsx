@@ -67,7 +67,7 @@ const DashboardPage = () => {
   const prevMonthLabel = format(subMonths(new Date(), 1), 'LLLL', { locale: ru });
 
   return (
-    <Box sx={{ pb: 3 }}>
+    <Box sx={{ pb: { xs: 10, md: 3 } }}>
       <PageHeader title="Мой баланс" subtitle={currentMonth} />
 
       <Grid container spacing={3}>

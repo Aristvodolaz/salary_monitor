@@ -1,8 +1,6 @@
 import { Box, Card, CardContent, Typography } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import { alpha } from '@mui/material/styles';
-import { TOKENS } from '../../theme';
 import { SkeletonCard } from './SkeletonCard';
 
 interface SubStat {
@@ -40,8 +38,8 @@ export const StatCard = ({
       sx={{
         height: '100%',
         ...(isHero && {
-          border: `2px solid ${TOKENS.gold}`,
-          boxShadow: `0 0 32px ${alpha(TOKENS.gold, 0.12)}`,
+          border: '2px solid var(--color-gold)',
+          boxShadow: '0 0 32px var(--color-gold-glow)',
         }),
         ...(isMuted && { opacity: 0.75 }),
         ...sx,
@@ -55,7 +53,7 @@ export const StatCard = ({
               fontWeight: 600,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
-              color: isHero ? TOKENS.gold : TOKENS.textSecondary,
+              color: isHero ? 'var(--color-gold)' : 'var(--color-text-secondary)',
             }}
           >
             {label}
@@ -69,8 +67,8 @@ export const StatCard = ({
                 px: 1,
                 py: 0.25,
                 borderRadius: 99,
-                backgroundColor: alpha(trendPositive ? TOKENS.success : TOKENS.error, 0.12),
-                color: trendPositive ? TOKENS.success : TOKENS.error,
+                backgroundColor: trendPositive ? 'var(--color-success-muted)' : 'var(--color-error-muted)',
+                color: trendPositive ? 'var(--color-success)' : 'var(--color-error)',
               }}
             >
               {trendPositive ? (
@@ -89,7 +87,7 @@ export const StatCard = ({
           sx={{
             fontSize: isHero ? '2rem' : '1.5rem',
             fontWeight: 700,
-            color: isHero ? TOKENS.gold : TOKENS.textPrimary,
+            color: isHero ? 'var(--color-gold)' : 'var(--color-text-primary)',
             mb: subStats?.length ? 2 : 0,
             lineHeight: 1.2,
           }}
@@ -101,10 +99,10 @@ export const StatCard = ({
           <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
             {subStats.map((stat, i) => (
               <Box key={i}>
-                <Typography sx={{ fontSize: '0.6875rem', color: TOKENS.textMuted, mb: 0.25, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600 }}>
+                <Typography sx={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', mb: 0.25, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600 }}>
                   {stat.label}
                 </Typography>
-                <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: TOKENS.textSecondary, fontFamily: TOKENS.fontMono }}>
+                <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
                   {stat.value}
                 </Typography>
               </Box>
