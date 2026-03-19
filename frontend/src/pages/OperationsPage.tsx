@@ -34,102 +34,171 @@ interface OperationCardProps {
   };
 }
 
-const OperationCard = ({ op }: OperationCardProps) => (
-  <Box
-    sx={{
-      backgroundColor: 'var(--color-bg-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 2,
-      p: 2,
-      transition: 'border-color 150ms ease',
-      '&:hover': { borderColor: 'var(--color-border-hover)' },
-    }}
-  >
-    {/* Row 1: Date + Amount */}
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-      <Typography
-        sx={{
-          fontSize: '0.8125rem',
-          fontFamily: 'var(--font-mono)',
-          color: 'var(--color-text-secondary)',
-          lineHeight: 1.4,
-        }}
-      >
-        {format(new Date(op.operation_date), 'dd.MM.yyyy HH:mm')}
-      </Typography>
-      <Box
-        component="span"
-        sx={{
-          color: 'var(--color-gold)',
-          fontWeight: 700,
-          fontFamily: 'var(--font-mono)',
-          fontSize: '1rem',
-          px: 1.5,
-          py: 0.25,
-          borderRadius: 1,
-          backgroundColor: 'var(--color-gold-muted)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          ml: 1,
-          flexShrink: 0,
-        }}
-      >
-        <CurrencyDisplay amount={op.base_amount || 0} variant="compact" />
-      </Box>
-    </Box>
+const OperationCard = ({ op }: OperationCardProps) => {
+  const isLarge = (op.base_amount || 0) >= 10000;
 
-    {/* Row 2: Operation type */}
-    <Typography
+  return (
+    <Box
       sx={{
-        fontSize: '0.9375rem',
-        fontWeight: 600,
-        color: 'var(--color-text-primary)',
-        mb: 1.25,
-        lineHeight: 1.3,
+        backgroundColor: 'var(--color-bg-surface)',
+        border: '1px solid var(--color-border)',
+        borderLeft: '3px solid var(--color-gold)',
+        borderRadius: '0 8px 8px 0',
+        overflow: 'hidden',
+        transition: 'border-color 150ms ease, box-shadow 150ms ease',
+        '&:hover': {
+          borderColor: 'var(--color-border-hover)',
+          borderLeftColor: 'var(--color-gold)',
+          boxShadow: '0 2px 12px var(--color-gold-glow)',
+        },
       }}
     >
-      {op.operation_type}
-    </Typography>
-
-    {/* Row 3: AEI + Rate */}
-    <Box sx={{ display: 'flex', gap: 3 }}>
-      <Box>
+      {/* Header: date + operation ID */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          px: 1.5,
+          pt: 1.25,
+          pb: 0.75,
+          borderBottom: '1px solid var(--color-border-subtle)',
+        }}
+      >
         <Typography
           sx={{
-            fontSize: '0.625rem',
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-mono)',
             color: 'var(--color-text-muted)',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            mb: 0.25,
+            lineHeight: 1,
           }}
         >
-          АЕИ
+          {format(new Date(op.operation_date), 'dd.MM.yyyy HH:mm')}
         </Typography>
-        <Typography sx={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-          {op.aei_count}
+        <Typography
+          sx={{
+            fontSize: '0.6875rem',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--color-text-muted)',
+            opacity: 0.6,
+          }}
+        >
+          #{op.operation_id}
         </Typography>
       </Box>
-      <Box>
+
+      {/* Body */}
+      <Box sx={{ px: 1.5, pt: 1, pb: 1.25 }}>
+        {/* Operation type */}
         <Typography
           sx={{
-            fontSize: '0.625rem',
-            color: 'var(--color-text-muted)',
+            fontSize: '0.875rem',
             fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            mb: 0.25,
+            color: 'var(--color-text-primary)',
+            lineHeight: 1.3,
+            mb: 1,
           }}
         >
-          Расценка
+          {op.operation_type}
         </Typography>
-        <Typography sx={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-          <CurrencyDisplay amount={op.rate || 0} variant="compact" />
-        </Typography>
+
+        {/* Amount — prominent, full width */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: 'var(--color-gold-muted)',
+            borderRadius: 1.5,
+            px: 1.25,
+            py: isLarge ? 0.75 : 0.5,
+            mb: 1,
+            fontSize: isLarge ? '1.0625rem' : '0.875rem',
+            fontWeight: 700,
+            color: 'var(--color-gold)',
+          }}
+        >
+          <CurrencyDisplay
+            amount={op.base_amount || 0}
+            variant={isLarge ? 'default' : 'compact'}
+          />
+        </Box>
+
+        {/* Footer: AEI + Rate chips */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              backgroundColor: 'var(--color-bg-elevated)',
+              border: '1px solid var(--color-border-subtle)',
+              borderRadius: 1,
+              px: 1,
+              py: 0.375,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.625rem',
+                color: 'var(--color-text-muted)',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              АЕИ
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: '0.8125rem',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--color-text-secondary)',
+                fontWeight: 600,
+              }}
+            >
+              {op.aei_count}
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              backgroundColor: 'var(--color-bg-elevated)',
+              border: '1px solid var(--color-border-subtle)',
+              borderRadius: 1,
+              px: 1,
+              py: 0.375,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.625rem',
+                color: 'var(--color-text-muted)',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              Расц.
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: '0.8125rem',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--color-text-secondary)',
+                fontWeight: 600,
+              }}
+            >
+              <CurrencyDisplay amount={op.rate || 0} variant="compact" />
+            </Typography>
+          </Box>
+        </Box>
       </Box>
     </Box>
-  </Box>
-);
+  );
+};
 
 // ── Skeleton Card (mobile loading) ─────────────────────────────────────────────
 const SkeletonOperationCards = () => (
@@ -140,9 +209,9 @@ const SkeletonOperationCards = () => (
         sx={{
           backgroundColor: 'var(--color-bg-surface)',
           border: '1px solid var(--color-border)',
-          borderRadius: 2,
-          p: 2,
-          height: 110,
+          borderLeft: '3px solid var(--color-gold)',
+          borderRadius: '0 8px 8px 0',
+          height: 130,
           animation: 'pulse 1.5s ease-in-out infinite',
           '@keyframes pulse': {
             '0%, 100%': { opacity: 1 },
