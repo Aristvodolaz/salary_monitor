@@ -57,6 +57,16 @@ export const adminAPI = {
     api.get('/admin/export', { params: { startDate, endDate, warehouseId }, responseType: 'blob' }),
   getStats: (warehouseId?: number) =>
     api.get('/admin/stats', { params: { warehouseId } }),
+  getEmployeeOperations: (
+    employeeId: string | number,
+    startDate: string,
+    endDate: string,
+    limit = 50,
+    offset = 0,
+  ) =>
+    api.get(`/admin/employees/${employeeId}/operations`, {
+      params: { startDate, endDate, limit, offset },
+    }),
 };
 
 export const usersAPI = {
