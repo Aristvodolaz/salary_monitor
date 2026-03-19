@@ -74,10 +74,13 @@ export class SapIntegrationService {
     const sapUser    = this.configService.get<string>('SAP_USERNAME');
     const sapPass    = this.configService.get<string>('SAP_PASSWORD');
 
+    this.logger.log(`SAP baseURL: ${sapBaseUrl}`);
+
     this.axiosInstance = axios.create({
       baseURL: sapBaseUrl,
       auth: { username: sapUser, password: sapPass },
       timeout: 120_000,
+      proxy: false, // Игнорируем HTTP_PROXY/HTTPS_PROXY из окружения
       // HTTP Keep-Alive: переиспользуем TCP-соединения между запросами
       httpAgent:  new http.Agent({ keepAlive: true, maxSockets: 5 }),
       httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 5 }),
@@ -185,6 +188,10 @@ export class SapIntegrationService {
       const chunks   = this.getDateChunks(periodStart, periodEnd, this.CHUNK_DAYS);
       const allItems = await this.fetchChunksParallel(warehouseCode, chunks);
       this.logger.log(`   SAP вернул: ${allItems.length} записей`);
+      if (allItems.length > 0) {
+        const sample = allItems[0];
+        this.logger.log(`   Пример: Employeeid="${sample.Employeeid}" Processor="${sample.Processor}" ZsumAmountItm="${sample.ZsumAmountItm}" Wcr="${sample.Wcr}"`);
+      }
 
       // Шаг 4: Парсинг и маппинг (полностью in-memory, без DB)
       const newUsers    = new Map<string, { fio: string }>();
@@ -192,6 +199,7 @@ export class SapIntegrationService {
       let skippedNoAei    = 0;
       let skippedNoWcr    = 0;
       let skippedNoTariff = 0;
+      const missingTariffs = new Map<string, number>();
 
       const resolveOperation = (item: any): OperationRow | null => {
         const parsed = this.parseItem(item);
@@ -233,7 +241,11 @@ export class SapIntegrationService {
         if (!wcrEntry) { skippedNoWcr++; continue; }
 
         const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
-        if (!tariff) { skippedNoTariff++; continue; }
+        if (!tariff) {
+          skippedNoTariff++;
+          missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
+          continue;
+        }
 
         const userId = ctx.userMap.get(parsed.employeeId);
         if (userId === undefined) {
@@ -280,9 +292,11 @@ export class SapIntegrationService {
       }
 
       // Шаг 6: Bulk-upsert батчами
+      this.logger.log(`   💾 Подготовлено операций для сохранения: ${operations.length}`);
       for (let b = 0; b < operations.length; b += this.BATCH_SIZE) {
-        await this.bulkUpsertOperations(operations.slice(b, b + this.BATCH_SIZE));
-        totalSaved += Math.min(this.BATCH_SIZE, operations.length - b);
+        const batchSlice = operations.slice(b, b + this.BATCH_SIZE);
+        await this.bulkUpsertOperations(batchSlice);
+        totalSaved += batchSlice.length;
       }
 
       const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
@@ -290,6 +304,17 @@ export class SapIntegrationService {
         `✅ Склад ${warehouseCode}: ${totalSaved} сохранено | ` +
         `noAEI=${skippedNoAei} noWCR=${skippedNoWcr} noTariff=${skippedNoTariff} | ${elapsed}s`,
       );
+      
+      if (missingTariffs.size > 0) {
+        this.logger.warn(`   ⚠️  Отсутствующие тарифы для ${warehouseCode}:`);
+        Array.from(missingTariffs.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .forEach(([opType, count]) => {
+            this.logger.warn(`      ${opType}: ${count} записей`);
+          });
+      }
+      
       await this.updateSyncLog(syncId, 'success', totalSaved);
     } catch (err) {
       this.logger.error(`❌ Склад ${warehouseCode}: ${err.message}`, err.stack);
@@ -371,7 +396,10 @@ export class SapIntegrationService {
           this.fetchChunkWithRetry(warehouseCode, chunk, i + j, chunks.length),
         ),
       );
-      for (const items of batchData) results.push(...items);
+      // Избегаем spread для больших массивов (переполнение стека)
+      for (const items of batchData) {
+        for (const item of items) results.push(item);
+      }
     }
 
     return results;
@@ -390,6 +418,7 @@ export class SapIntegrationService {
 
     return this.withRetry(
       async () => {
+        this.logger.log(`   🔗 Запрос: ${this.axiosInstance.defaults.baseURL}${url}`);
         const resp  = await this.axiosInstance.get(url, { timeout: 180_000 });
         const items = resp.data?.d?.results || [];
         this.logger.log(`   📡 ${label} → ${items.length} записей`);
@@ -409,8 +438,11 @@ export class SapIntegrationService {
     // ║  Это главный показатель по ТЗ. Используем напрямую.         ║
     // ║  НЕ рассчитываем из Actdura — это было источником ошибки!   ║
     // ╚══════════════════════════════════════════════════════════════╝
-    const aeiCount = parseFloat(item.ZsumAmountItm || '0');
+    const aeiCount = Math.round(parseFloat(item.ZsumAmountItm || '0'));
     if (aeiCount <= 0) return null;
+
+    const employeeId = (item.Employeeid || item.Processor || '').trim();
+    if (!employeeId) return null; // Пропускаем только пустые ID
 
     // Дата из формата /Date(timestamp)/
     let operationDate = new Date();
@@ -420,7 +452,7 @@ export class SapIntegrationService {
     }
 
     return {
-      employeeId:    (item.Employeeid || item.Processor || '').trim(),
+      employeeId,
       employeeName1: (item.McName1 || '').trim(),
       employeeName2: (item.McName2 || '').trim(),
       warehouseCode: item.Lgnum,
@@ -437,72 +469,66 @@ export class SapIntegrationService {
   // ──────────────────────────────────────────────────────────────
 
   private async bulkUpsertOperations(batch: OperationRow[]): Promise<void> {
-    if (batch.length === 0) return;
-
-    const pool = this.db.getPool();
-
-    // Строим in-memory таблицу
-    const table = new sql.Table();
-    table.columns.add('user_id',          sql.Int,           { nullable: false });
-    table.columns.add('warehouse_code',   sql.NVarChar(10),  { nullable: false });
-    table.columns.add('operation_type',   sql.NVarChar(100), { nullable: false });
-    table.columns.add('participant_area', sql.NVarChar(20),  { nullable: true });
-    table.columns.add('count',            sql.Float,         { nullable: false });
-    table.columns.add('actdura',          sql.Float,         { nullable: true });
-    table.columns.add('operation_date',   sql.DateTime,      { nullable: false });
-    table.columns.add('amount',           sql.Float,         { nullable: true });
-    table.columns.add('sap_order_id',     sql.NVarChar(100), { nullable: true });
-
-    for (const row of batch) {
-      table.rows.add(
-        row.userId,
-        row.warehouseCode,
-        row.operationType,
-        row.participantArea || null,
-        row.count,
-        row.actdura || null,
-        row.operationDate,
-        row.amount,
-        row.sapOrderId || null,
-      );
+    if (batch.length === 0) {
+      this.logger.log('   ⚠️  Пустой батч — пропускаем bulk insert');
+      return;
     }
 
-    // Один network round-trip: загружаем весь батч
-    const bulkRequest = pool.request();
-    await bulkRequest.bulk(table);
-
-    // MERGE: UPDATE если существует, INSERT если нового
-    // Ключ идемпотентности: user_id + sap_order_id + operation_type
-    await pool.request().query(`
-      MERGE operations AS target
-      USING (
-        SELECT
-          user_id, warehouse_code, operation_type, participant_area,
-          count, actdura, operation_date, amount, sap_order_id
-        FROM #tmp_bulk_ops
-      ) AS source
-      ON (
-        target.user_id        = source.user_id
-        AND target.sap_order_id   = source.sap_order_id
-        AND target.operation_type = source.operation_type
-      )
-      WHEN MATCHED THEN
-        UPDATE SET
-          target.count            = source.count,
-          target.amount           = source.amount,
-          target.actdura          = source.actdura,
-          target.participant_area = source.participant_area,
-          target.updated_at       = GETDATE()
-      WHEN NOT MATCHED THEN
-        INSERT (
-          user_id, warehouse_code, operation_type, participant_area,
-          count, actdura, operation_date, amount, sap_order_id
-        ) VALUES (
-          source.user_id,        source.warehouse_code, source.operation_type,
-          source.participant_area, source.count,         source.actdura,
-          source.operation_date, source.amount,          source.sap_order_id
-        );
-    `);
+    const pool = this.db.getPool();
+    
+    this.logger.log(`   📦 Batch MERGE: ${batch.length} строк`);
+    
+    // Batch MERGE через VALUES (без временной таблицы)
+    // Разбиваем на подбатчи по 100 строк (SQL Server ограничение на VALUES)
+    const CHUNK_SIZE = 100;
+    let inserted = 0;
+    
+    for (let i = 0; i < batch.length; i += CHUNK_SIZE) {
+      const chunk = batch.slice(i, i + CHUNK_SIZE);
+      
+      // Строим VALUES для MERGE
+      const values = chunk.map((row, idx) => {
+        const userId = row.userId;
+        const warehouseCode = `N'${(row.warehouseCode || '').replace(/'/g, "''")}'`;
+        const operationType = `N'${(row.operationType || '').replace(/'/g, "''")}'`;
+        const participantArea = row.participantArea ? `N'${row.participantArea.replace(/'/g, "''")}'` : 'NULL';
+        const count = row.count;
+        const actdura = row.actdura != null ? row.actdura : 'NULL';
+        const operationDate = `'${row.operationDate.toISOString().slice(0, 19)}'`;
+        const amount = row.amount != null ? row.amount : 'NULL';
+        const sapOrderId = row.sapOrderId ? `N'${row.sapOrderId.replace(/'/g, "''")}'` : 'NULL';
+        
+        return `(${userId}, ${warehouseCode}, ${operationType}, ${participantArea}, ${count}, ${actdura}, ${operationDate}, ${amount}, ${sapOrderId})`;
+      }).join(',\n        ');
+      
+      await pool.request().query(`
+        MERGE operations AS target
+        USING (
+          SELECT * FROM (VALUES
+            ${values}
+          ) AS source(user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id)
+        ) AS source
+        ON (
+          target.user_id = source.user_id
+          AND target.sap_order_id = source.sap_order_id
+          AND target.operation_type = source.operation_type
+        )
+        WHEN MATCHED THEN
+          UPDATE SET
+            target.count = source.count,
+            target.amount = source.amount,
+            target.actdura = source.actdura,
+            target.participant_area = source.participant_area,
+            target.updated_at = GETDATE()
+        WHEN NOT MATCHED THEN
+          INSERT (user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id)
+          VALUES (source.user_id, source.warehouse_code, source.operation_type, source.participant_area, source.count, source.actdura, source.operation_date, source.amount, source.sap_order_id);
+      `);
+      
+      inserted += chunk.length;
+    }
+    
+    this.logger.log(`   ✅ Сохранено: ${inserted} операций`);
   }
 
   // ──────────────────────────────────────────────────────────────
