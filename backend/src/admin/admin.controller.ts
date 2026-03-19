@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Query,
+  Param,
+  ParseIntPipe,
   UseGuards,
   Header,
 } from '@nestjs/common';
@@ -63,6 +65,29 @@ export class AdminController {
       warehouseId,
     );
     return result.csv;
+  }
+
+  /**
+   * GET /api/admin/employees/:id/operations
+   * Операции конкретного сотрудника за период (с пагинацией)
+   */
+  @Get('employees/:id/operations')
+  async getEmployeeOperations(
+    @CurrentUser() user: any,
+    @Param('id', ParseIntPipe) employeeId: number,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.adminService.getEmployeeOperations(
+      user,
+      employeeId,
+      startDate,
+      endDate,
+      limit ? parseInt(limit, 10) : 50,
+      offset ? parseInt(offset, 10) : 0,
+    );
   }
 
   /**

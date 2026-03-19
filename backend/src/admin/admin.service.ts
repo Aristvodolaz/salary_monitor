@@ -63,6 +63,78 @@ export class AdminService {
   }
 
   /**
+   * Получить операции конкретного сотрудника за период (с пагинацией)
+   * Доступно только для сотрудников склада текущего администратора
+   */
+  async getEmployeeOperations(
+    adminUser: any,
+    employeeId: number,
+    startDate: string,
+    endDate: string,
+    limit = 50,
+    offset = 0,
+  ) {
+    // Считаем итого (с учётом принадлежности к складу администратора)
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM v_salary_details sd
+      INNER JOIN users u ON sd.user_id = u.id
+      WHERE u.id = @employeeId
+        AND u.warehouse_id = @warehouseId
+        AND sd.operation_date >= @startDate
+        AND sd.operation_date <= @endDate
+    `;
+
+    const countResult = await this.db.queryOne<{ total: number }>(countQuery, {
+      employeeId,
+      warehouseId: adminUser.warehouseId,
+      startDate,
+      endDate,
+    });
+
+    if (!countResult || countResult.total === 0) {
+      return { operations: [], pagination: { total: 0, limit, offset } };
+    }
+
+    const dataQuery = `
+      SELECT
+        sd.operation_id,
+        sd.operation_type,
+        sd.participant_area,
+        sd.aei_count,
+        sd.operation_date,
+        sd.rate,
+        sd.base_amount
+      FROM v_salary_details sd
+      INNER JOIN users u ON sd.user_id = u.id
+      WHERE u.id = @employeeId
+        AND u.warehouse_id = @warehouseId
+        AND sd.operation_date >= @startDate
+        AND sd.operation_date <= @endDate
+      ORDER BY sd.operation_date DESC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `;
+
+    const operations = await this.db.query(dataQuery, {
+      employeeId,
+      warehouseId: adminUser.warehouseId,
+      startDate,
+      endDate,
+      offset,
+      limit,
+    });
+
+    return {
+      operations,
+      pagination: {
+        total: countResult.total,
+        limit,
+        offset,
+      },
+    };
+  }
+
+  /**
    * Экспорт данных в CSV-формат
    */
   async exportWarehouseSalary(
