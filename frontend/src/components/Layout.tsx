@@ -7,7 +7,6 @@ import {
   IconButton,
   Drawer,
   List,
-  ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -21,16 +20,28 @@ import {
   AdminPanelSettings,
   Logout,
 } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { TOKENS } from '../theme';
+
+const SIDEBAR_WIDTH = 240;
+
+const getInitials = (fio: string) =>
+  fio
+    .split(' ')
+    .slice(0, 2)
+    .map((w) => w[0] || '')
+    .join('')
+    .toUpperCase();
 
 const Layout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const menuItems = [
     { text: 'Дашборд', icon: <Dashboard />, path: '/' },
@@ -46,103 +57,249 @@ const Layout = () => {
     navigate('/login');
   };
 
-  const drawer = (
-    <Box sx={{ width: { xs: 280, sm: 250 }, pt: 3 }}>
-      <Box sx={{ px: 3, mb: 3, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="subtitle1" color="text.primary" sx={{ fontWeight: 600, fontSize: { xs: '1.125rem', sm: '1rem' } }}>
-          {user?.fio}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          ШК: {user?.employeeId}
+  const sidebarContent = (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        width: SIDEBAR_WIDTH,
+      }}
+    >
+      {/* Logo */}
+      <Box
+        sx={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          px: 2.5,
+          borderBottom: `1px solid ${TOKENS.border}`,
+          flexShrink: 0,
+        }}
+      >
+        <Box
+          sx={{
+            width: 32,
+            height: 32,
+            borderRadius: '8px',
+            background: `linear-gradient(135deg, ${TOKENS.red} 0%, ${TOKENS.redDim} 100%)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontWeight: 800,
+            fontSize: '0.875rem',
+            fontFamily: TOKENS.fontDisplay,
+            flexShrink: 0,
+            boxShadow: `0 2px 8px ${alpha(TOKENS.red, 0.4)}`,
+          }}
+        >
+          К
+        </Box>
+        <Typography
+          sx={{
+            ml: 1.5,
+            fontWeight: 700,
+            fontSize: '1rem',
+            color: TOKENS.textPrimary,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          BalanceMonitor
         </Typography>
       </Box>
 
-      <List sx={{ px: 1 }}>
-        {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+      {/* Nav items */}
+      <Box sx={{ flex: 1, overflowY: 'auto', py: 1.5 }}>
+        <List disablePadding>
+          {menuItems.map((item) => (
             <ListItemButton
+              key={item.path}
               selected={location.pathname === item.path}
               onClick={() => {
                 navigate(item.path);
-                setDrawerOpen(false);
-              }}
-              sx={{
-                borderRadius: 2,
-                py: { xs: 2, sm: 1.5 },
-                '&.Mui-selected': {
-                  bgcolor: 'rgba(227, 30, 36, 0.1)',
-                  '&:hover': {
-                    bgcolor: 'rgba(227, 30, 36, 0.15)',
-                  }
-                }
+                setMobileOpen(false);
               }}
             >
-              <ListItemIcon sx={{ minWidth: { xs: 48, sm: 40 } }}>
-                <Box sx={{ fontSize: { xs: 28, sm: 24 } }}>{item.icon}</Box>
-              </ListItemIcon>
-              <ListItemText 
-                primary={item.text}
-                primaryTypographyProps={{
-                  fontSize: { xs: '1.125rem', sm: '1rem' },
-                  fontWeight: location.pathname === item.path ? 600 : 400
-                }}
-              />
+              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.text} />
             </ListItemButton>
-          </ListItem>
-        ))}
+          ))}
+        </List>
+      </Box>
 
-        <ListItem disablePadding sx={{ mt: 2 }}>
-          <ListItemButton 
-            onClick={handleLogout}
-            sx={{
-              borderRadius: 2,
-              py: { xs: 2, sm: 1.5 },
-              color: 'error.main',
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: { xs: 48, sm: 40 }, color: 'error.main' }}>
-              <Logout sx={{ fontSize: { xs: 28, sm: 24 } }} />
-            </ListItemIcon>
-            <ListItemText 
-              primary="Выход"
-              primaryTypographyProps={{
-                fontSize: { xs: '1.125rem', sm: '1rem' },
-                fontWeight: 500
+      {/* User info + logout */}
+      <Box
+        sx={{
+          borderTop: `1px solid ${TOKENS.border}`,
+          p: 2,
+          flexShrink: 0,
+        }}
+      >
+        {user && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+            <Box
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: `linear-gradient(135deg, ${TOKENS.red} 0%, ${TOKENS.redDim} 100%)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: 'white',
+                flexShrink: 0,
+                fontFamily: TOKENS.fontDisplay,
               }}
-            />
-          </ListItemButton>
-        </ListItem>
-      </List>
+            >
+              {getInitials(user.fio)}
+            </Box>
+            <Box sx={{ overflow: 'hidden' }}>
+              <Typography
+                sx={{
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: TOKENS.textPrimary,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {user.fio}
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: '0.75rem',
+                  color: TOKENS.textSecondary,
+                  fontFamily: TOKENS.fontMono,
+                }}
+              >
+                ШК: {user.employeeId}
+              </Typography>
+            </Box>
+          </Box>
+        )}
+
+        <ListItemButton
+          onClick={handleLogout}
+          sx={{
+            borderRadius: 2,
+            px: 1.5,
+            py: 1,
+            mx: 0,
+            width: '100%',
+            color: TOKENS.error,
+            '&:hover': {
+              backgroundColor: alpha(TOKENS.error, 0.08),
+            },
+            '& .MuiListItemIcon-root': {
+              color: TOKENS.error,
+              minWidth: 36,
+            },
+          }}
+        >
+          <ListItemIcon>
+            <Logout fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Выйти"
+            primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+          />
+        </ListItemButton>
+      </Box>
     </Box>
   );
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <AppBar position="fixed" sx={{ bgcolor: '#E31E24' }}>
-        <Toolbar sx={{ minHeight: { xs: 64, sm: 64 } }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: 'background.default' }}>
+      {/* Desktop permanent sidebar */}
+      <Drawer
+        variant="permanent"
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          '& .MuiDrawer-paper': {
+            width: SIDEBAR_WIDTH,
+            position: 'fixed',
+            height: '100vh',
+            top: 0,
+            left: 0,
+          },
+        }}
+      >
+        {sidebarContent}
+      </Drawer>
+
+      {/* Mobile temporary drawer */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          '& .MuiDrawer-paper': {
+            width: SIDEBAR_WIDTH,
+          },
+        }}
+        ModalProps={{ keepMounted: true }}
+      >
+        {sidebarContent}
+      </Drawer>
+
+      {/* Mobile top AppBar */}
+      <AppBar
+        position="fixed"
+        sx={{
+          display: { xs: 'flex', md: 'none' },
+          left: 0,
+          right: 0,
+        }}
+      >
+        <Toolbar>
           <IconButton
             color="inherit"
             edge="start"
-            onClick={() => setDrawerOpen(true)}
-            sx={{ mr: 2, p: { xs: 1.5, sm: 1 } }}
+            onClick={() => setMobileOpen(true)}
+            sx={{ mr: 2 }}
           >
-            <MenuIcon sx={{ fontSize: { xs: 28, sm: 24 } }} />
+            <MenuIcon />
           </IconButton>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontSize: { xs: '1.25rem', sm: '1.25rem' }, fontWeight: 600 }}>
+          <Box
+            sx={{
+              width: 28,
+              height: 28,
+              borderRadius: '6px',
+              background: `linear-gradient(135deg, ${TOKENS.red} 0%, ${TOKENS.redDim} 100%)`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              mr: 1.5,
+            }}
+          >
+            К
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, flexGrow: 1, fontSize: '1rem' }}>
             BalanceMonitor
           </Typography>
         </Toolbar>
       </AppBar>
 
-      <Drawer
-        variant={isMobile ? 'temporary' : 'temporary'}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+      {/* Main content */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          ml: { xs: 0, md: `${SIDEBAR_WIDTH}px` },
+          mt: { xs: '64px', md: 0 },
+          p: { xs: 2, sm: 3 },
+          minHeight: '100vh',
+          backgroundColor: 'background.default',
+        }}
       >
-        {drawer}
-      </Drawer>
-
-      <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, mt: { xs: 8, sm: 8 }, minHeight: '100vh' }}>
         <Outlet />
       </Box>
     </Box>
@@ -150,4 +307,3 @@ const Layout = () => {
 };
 
 export default Layout;
-
