@@ -9,7 +9,6 @@ import {
   Tooltip,
 } from '@mui/material';
 import { NavigateBefore, NavigateNext } from '@mui/icons-material';
-import { alpha } from '@mui/material/styles';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { TOKENS } from '../../theme';

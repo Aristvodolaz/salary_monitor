@@ -40,7 +40,6 @@ import {
 import { alpha } from '@mui/material/styles';
 import { adminAPI } from '../services/api';
 import { format, subDays, startOfMonth } from 'date-fns';
-import { ru } from 'date-fns/locale';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import { PageHeader } from '../components/ui/PageHeader';
 import { EmptyState } from '../components/ui/EmptyState';
