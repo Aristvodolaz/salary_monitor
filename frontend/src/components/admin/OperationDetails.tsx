@@ -139,7 +139,7 @@ export const OperationDetails = memo(({
       </Box>
 
       {/* Строки */}
-      {records.map((rec) => {
+      {records.map((rec: import('../../services/api').OperationRecord) => {
         let dateLabel = '—';
         try {
           const d = new Date(rec.operation_date);

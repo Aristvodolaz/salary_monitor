@@ -176,7 +176,7 @@ const ExpandedEmployeeRow = ({
         ))}
       </Box>
 
-      {data.map((group) => {
+      {data.map((group: import('../services/api').OperationSummary) => {
         const key = `${employeeId}-${group.operation_type}-${group.participant_area || ''}`;
         return (
           <OperationGroup
