@@ -115,36 +115,13 @@ export const OperationDetails = memo(({
         </Typography>
       </Box>
 
-      {/* Шапка таблицы */}
-      <Box sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr 60px 80px', sm: '1fr 70px 70px 80px 100px' },
-        gap: 1,
-        px: 1,
-        py: 0.5,
-        mb: 0.25,
-      }}>
-        {['Дата и время', 'АЕИ', 'Ставка', 'Сумма'].map((h, i) => (
-          <Typography key={i} sx={{
-            fontSize: '0.625rem',
-            fontWeight: 700,
-            color: 'var(--color-text-muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            textAlign: i > 0 ? 'right' : 'left',
-            display: i === 1 || i === 2 ? { xs: 'none', sm: 'block' } : 'block',
-          }}>
-            {h}
-          </Typography>
-        ))}
-      </Box>
-
-      {/* Строки */}
+      {/* Строки детализации — формат: "18.10.2025 — Пополнение — 2 АЕИ — 1.56 руб — всего 3.12 руб" */}
       {records.map((rec: OperationRecord) => {
         let dateLabel = '—';
+        let opType = operationType;
         try {
           const d = new Date(rec.operation_date);
-          dateLabel = format(d, 'dd MMM yyyy, HH:mm', { locale: ru });
+          dateLabel = format(d, 'dd.MM.yyyy', { locale: ru });
         } catch {
           //
         }
@@ -153,13 +130,9 @@ export const OperationDetails = memo(({
           <Box
             key={rec.operation_id}
             sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr 60px 80px', sm: '1fr 70px 70px 80px 100px' },
-              gap: 1,
-              alignItems: 'center',
-              px: 1,
-              py: 0.625,
-              mb: 0.25,
+              px: 1.5,
+              py: 0.75,
+              mb: 0.5,
               borderRadius: 1,
               backgroundColor: 'var(--color-bg-elevated)',
               border: '1px solid transparent',
@@ -168,48 +141,21 @@ export const OperationDetails = memo(({
             }}
           >
             <Typography sx={{
-              fontSize: '0.75rem',
+              fontSize: '0.8125rem',
               fontFamily: 'var(--font-mono)',
-              color: 'var(--color-text-secondary)',
+              color: 'var(--color-text-primary)',
+              lineHeight: 1.6,
             }}>
-              {dateLabel}
-            </Typography>
-            <Typography sx={{
-              fontSize: '0.75rem',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--color-text-secondary)',
-              textAlign: 'right',
-              display: { xs: 'none', sm: 'block' },
-            }}>
-              {rec.aei_count}
-            </Typography>
-            <Typography sx={{
-              fontSize: '0.75rem',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--color-text-muted)',
-              textAlign: 'right',
-              display: { xs: 'none', sm: 'block' },
-            }}>
-              <CurrencyDisplay amount={rec.rate || 0} variant="compact" />
-            </Typography>
-            <Box sx={{ textAlign: 'right' }}>
-              <Box
+              {dateLabel} — {opType} — {rec.aei_count} АЕИ — <CurrencyDisplay amount={rec.rate || 0} variant="compact" /> — всего <Box
                 component="span"
                 sx={{
                   color: TOKENS.gold,
-                  fontWeight: 600,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.8125rem',
-                  px: 0.75,
-                  py: 0.125,
-                  borderRadius: 0.75,
-                  backgroundColor: alpha(TOKENS.gold, 0.06),
-                  display: 'inline-block',
+                  fontWeight: 700,
                 }}
               >
                 <CurrencyDisplay amount={rec.base_amount || 0} variant="compact" />
               </Box>
-            </Box>
+            </Typography>
           </Box>
         );
       })}

@@ -30,6 +30,7 @@ import {
   Clear,
   KeyboardArrowDown,
   KeyboardArrowUp,
+  KeyboardArrowRight,
   FirstPage,
   LastPage,
   NavigateBefore,
@@ -45,6 +46,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { EmptyState } from '../components/ui/EmptyState';
 import { TOKENS } from '../theme';
 import { DebugPanel, type DebugPanelData } from '../components/admin/DebugPanel';
+import { OperationDetails } from '../components/admin/OperationDetails';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 type Period = 'today' | 'week' | 'month' | 'custom';
@@ -100,51 +102,53 @@ const ExpandedSkeleton = () => (
   </Box>
 );
 
-// ── Expanded Employee Row ──────────────────────────────────────────────────────
+// ── Expanded Employee Row (Уровень 2 — Агрегаты операций) ─────────────────────
 interface ExpandedRowProps {
   employeeId: string | number;
   startDate: string;
   endDate: string;
 }
 
-const PAGE_SIZE = 50;
-
 const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProps) => {
-  const [ops, setOps] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
+  const [summaries, setSummaries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-
-  const loadPage = useCallback(async (offset: number, append = false) => {
-    try {
-      if (append) setLoadingMore(true);
-      else setLoading(true);
-      const res = await adminAPI.getEmployeeOperations(employeeId, startDate, endDate, PAGE_SIZE, offset);
-      const data = res.data;
-      const list = data?.operations ?? data ?? [];
-      const pagTotal = data?.pagination?.total ?? list.length;
-      setOps((prev) => (append ? [...prev, ...list] : list));
-      setTotal(pagTotal);
-    } catch (err: any) {
-      const status = err.response?.status;
-      setError(
-        status === 404
-          ? 'Эндпоинт /admin/employees/{id}/operations не реализован на сервере'
-          : err.response?.data?.message || 'Ошибка загрузки операций'
-      );
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [employeeId, startDate, endDate]);
+  const [expandedOps, setExpandedOps] = useState<Map<string, boolean>>(new Map());
 
   useEffect(() => {
-    loadPage(0);
-  }, [loadPage]);
+    let cancelled = false;
+    setLoading(true);
+    setError('');
 
-  const hasMore = ops.length < total;
-  const handleLoadMore = () => loadPage(ops.length, true);
+    adminAPI
+      .getEmployeeOperationsSummary(Number(employeeId), startDate, endDate)
+      .then((res) => {
+        if (!cancelled) setSummaries(res.data || []);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const status = err.response?.status;
+          setError(
+            status === 404
+              ? 'Эндпоинт /operations/summary не реализован на сервере'
+              : err.response?.data?.message || 'Ошибка загрузки операций'
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [employeeId, startDate, endDate]);
+
+  const handleToggleOp = (key: string) => {
+    setExpandedOps((prev) => {
+      const next = new Map(prev);
+      next.set(key, !prev.get(key));
+      return next;
+    });
+  };
 
   if (loading) return <ExpandedSkeleton />;
 
@@ -156,7 +160,7 @@ const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProp
     );
   }
 
-  if (ops.length === 0) {
+  if (summaries.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
         <Typography sx={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
@@ -166,113 +170,101 @@ const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProp
     );
   }
 
-  // Group by date
-  const grouped: Record<string, any[]> = {};
-  ops.forEach((op) => {
-    const dateKey = format(new Date(op.operation_date), 'dd MMMM yyyy', { locale: ru });
-    if (!grouped[dateKey]) grouped[dateKey] = [];
-    grouped[dateKey].push(op);
-  });
-
   return (
-    <Box sx={{ px: 2.5, pb: 2, pt: 1 }}>
-      <Box sx={{ maxHeight: 420, overflowY: 'auto', pr: 0.5 }}>
-      {Object.entries(grouped).map(([dateLabel, dayOps]) => (
-        <Box key={dateLabel} sx={{ mb: 2 }}>
-          {/* Date header */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.5,
-              mb: 1,
-              mt: 0.5,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                color: 'var(--color-text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {dateLabel}
-            </Typography>
-            <Box sx={{ flex: 1, height: '1px', backgroundColor: 'var(--color-border)' }} />
-            <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-              {dayOps.length} оп.
-            </Typography>
-          </Box>
-
-          {/* Operations for this date */}
-          {dayOps.map((op) => (
+    <Box sx={{ px: 2.5, pb: 2, pt: 1.5 }}>
+      {summaries.map((summary) => {
+        const key = `${employeeId}-${summary.operation_type}-${summary.participant_area || ''}`;
+        return (
+          <Box key={key} sx={{ mb: 0.75 }}>
+            {/* Уровень 2 — Агрегат операции (кликабельная строка) */}
             <Box
-              key={op.operation_id}
+              onClick={() => handleToggleOp(key)}
               sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 80px 100px 110px' },
-                gap: { xs: 0.5, sm: 1 },
+                display: 'flex',
                 alignItems: 'center',
+                gap: 1.5,
                 px: 1.5,
-                py: 0.875,
-                mb: 0.5,
-                borderRadius: 1,
-                backgroundColor: 'var(--color-bg-elevated)',
-                border: '1px solid var(--color-border-subtle)',
-                transition: 'border-color 150ms ease',
-                '&:hover': { borderColor: 'var(--color-border)' },
+                py: 1,
+                borderRadius: 1.5,
+                backgroundColor: expandedOps.get(key)
+                  ? alpha(TOKENS.gold, 0.06)
+                  : 'var(--color-bg-elevated)',
+                border: `1px solid ${expandedOps.get(key) ? alpha(TOKENS.gold, 0.25) : 'var(--color-border-subtle)'}`,
+                cursor: 'pointer',
+                transition: 'all 150ms ease',
+                '&:hover': {
+                  backgroundColor: alpha(TOKENS.gold, 0.04),
+                  borderColor: alpha(TOKENS.gold, 0.2),
+                },
               }}
             >
-              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                {op.operation_type}
+              {/* Иконка раскрытия */}
+              <IconButton
+                size="small"
+                sx={{ color: 'var(--color-text-muted)', p: 0.25, pointerEvents: 'none' }}
+              >
+                {expandedOps.get(key)
+                  ? <KeyboardArrowDown fontSize="small" />
+                  : <KeyboardArrowRight fontSize="small" />}
+              </IconButton>
+
+              {/* Формат: "Пополнение — 26987 АЕИ — 15896 руб" */}
+              <Typography sx={{
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                color: 'var(--color-text-primary)',
+                flex: 1,
+              }}>
+                {summary.operation_type} — {summary.total_aei} АЕИ — <CurrencyDisplay amount={summary.total_amount || 0} variant="compact" />
               </Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                {format(new Date(op.operation_date), 'HH:mm')}
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-                АЕИ: {op.aei_count}
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-                <CurrencyDisplay amount={op.rate || 0} variant="compact" />
-              </Typography>
-              <Box sx={{ textAlign: 'right' }}>
-                <Box
-                  component="span"
+
+              {summary.participant_area && (
+                <Chip
+                  label={summary.participant_area}
+                  size="small"
                   sx={{
-                    color: 'var(--color-gold)',
-                    fontWeight: 700,
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.875rem',
-                    px: 1,
-                    py: 0.25,
-                    borderRadius: 1,
-                    backgroundColor: 'var(--color-gold-muted)',
-                    display: 'inline-block',
+                    fontSize: '0.625rem',
+                    height: 18,
+                    backgroundColor: alpha(TOKENS.info, 0.1),
+                    color: TOKENS.info,
+                    border: `1px solid ${alpha(TOKENS.info, 0.2)}`,
+                  }}
+                />
+              )}
+
+              <Typography sx={{
+                fontSize: '0.6875rem',
+                color: 'var(--color-text-muted)',
+                fontFamily: 'var(--font-mono)',
+              }}>
+                {summary.operations_count} оп.
+              </Typography>
+            </Box>
+
+            {/* Уровень 3 — Детализация (раскрывается при клике) */}
+            <Collapse in={expandedOps.get(key)} timeout={200} unmountOnExit>
+              {expandedOps.get(key) && (
+                <Box
+                  sx={{
+                    ml: 3,
+                    mt: 0.75,
+                    borderLeft: `2px solid ${alpha(TOKENS.gold, 0.2)}`,
+                    pl: 1.5,
                   }}
                 >
-                  <CurrencyDisplay amount={op.base_amount || 0} variant="compact" />
+                  <OperationDetails
+                    employeeId={Number(employeeId)}
+                    operationType={summary.operation_type}
+                    participantArea={summary.participant_area || ''}
+                    startDate={startDate}
+                    endDate={endDate}
+                  />
                 </Box>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      ))}
-      </Box>
-      {hasMore && (
-        <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'center' }}>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleLoadMore}
-            disabled={loadingMore}
-          >
-            {loadingMore ? 'Загрузка…' : `Загрузить ещё (${ops.length} из ${total})`}
-          </Button>
-        </Box>
-      )}
+              )}
+            </Collapse>
+          </Box>
+        );
+      })}
     </Box>
   );
 };
