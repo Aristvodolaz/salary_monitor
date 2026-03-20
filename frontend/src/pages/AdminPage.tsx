@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -35,16 +36,17 @@ import {
   NavigateBefore,
   NavigateNext,
   BugReport,
+  TableChart,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { adminAPI } from '../services/api';
 import { format, subDays, startOfMonth } from 'date-fns';
-import { ru } from 'date-fns/locale';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import { PageHeader } from '../components/ui/PageHeader';
 import { EmptyState } from '../components/ui/EmptyState';
 import { TOKENS } from '../theme';
 import { DebugPanel, type DebugPanelData } from '../components/admin/DebugPanel';
+import { OperationGroup } from '../components/admin/OperationGroup';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 type Period = 'today' | 'week' | 'month' | 'custom';
@@ -91,8 +93,9 @@ const ExpandedSkeleton = () => (
   <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
     {Array.from({ length: 4 }).map((_, i) => (
       <Box key={i} sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        <Skeleton width={120} height={14} />
-        <Skeleton width={160} height={14} sx={{ flex: 1 }} />
+        <Skeleton width={24} height={24} variant="circular" />
+        <Skeleton width="35%" height={14} />
+        <Skeleton width={60} height={14} sx={{ ml: 'auto' }} />
         <Skeleton width={60} height={14} />
         <Skeleton width={80} height={14} />
       </Box>
@@ -100,56 +103,44 @@ const ExpandedSkeleton = () => (
   </Box>
 );
 
-// ── Expanded Employee Row ──────────────────────────────────────────────────────
+// ── Expanded Employee Row (уровень 2 — агрегаты по типам операций) ─────────────
 interface ExpandedRowProps {
-  employeeId: string | number;
+  employeeId: number;
   startDate: string;
   endDate: string;
+  expandedOps: Map<string, boolean>;
+  onToggleOp: (key: string) => void;
 }
 
-const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProps) => {
-  const [ops, setOps] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+const ExpandedEmployeeRow = ({
+  employeeId,
+  startDate,
+  endDate,
+  expandedOps,
+  onToggleOp,
+}: ExpandedRowProps) => {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['employee-ops-summary', employeeId, startDate, endDate],
+    queryFn: () =>
+      adminAPI.getEmployeeOperationsSummary(employeeId, startDate, endDate).then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError('');
+  if (isLoading) return <ExpandedSkeleton />;
 
-    adminAPI
-      .getEmployeeOperations(employeeId, startDate, endDate)
-      .then((res) => {
-        if (!cancelled) setOps(res.data?.operations || res.data || []);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          const status = err.response?.status;
-          if (status === 404) {
-            setError('Эндпоинт /admin/employees/{id}/operations не реализован на сервере');
-          } else {
-            setError(err.response?.data?.message || 'Ошибка загрузки операций');
-          }
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [employeeId, startDate, endDate]);
-
-  if (loading) return <ExpandedSkeleton />;
-
-  if (error) {
+  if (isError) {
+    const status = (error as any)?.response?.status;
+    const msg = status === 404
+      ? 'Эндпоинт /operations/summary не реализован на сервере'
+      : (error as any)?.response?.data?.message || 'Ошибка загрузки операций';
     return (
       <Box sx={{ p: 2.5 }}>
-        <Alert severity="info" sx={{ fontSize: '0.8125rem' }}>{error}</Alert>
+        <Alert severity="info" sx={{ fontSize: '0.8125rem' }}>{msg}</Alert>
       </Box>
     );
   }
 
-  if (ops.length === 0) {
+  if (!data || data.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
         <Typography sx={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
@@ -159,99 +150,46 @@ const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProp
     );
   }
 
-  // Group by date
-  const grouped: Record<string, any[]> = {};
-  ops.forEach((op) => {
-    const dateKey = format(new Date(op.operation_date), 'dd MMMM yyyy', { locale: ru });
-    if (!grouped[dateKey]) grouped[dateKey] = [];
-    grouped[dateKey].push(op);
-  });
-
   return (
-    <Box sx={{ px: 2.5, pb: 2, pt: 1 }}>
-      {Object.entries(grouped).map(([dateLabel, dayOps]) => (
-        <Box key={dateLabel} sx={{ mb: 2 }}>
-          {/* Date header */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.5,
-              mb: 1,
-              mt: 0.5,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                color: 'var(--color-text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {dateLabel}
-            </Typography>
-            <Box sx={{ flex: 1, height: '1px', backgroundColor: 'var(--color-border)' }} />
-            <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-              {dayOps.length} оп.
-            </Typography>
-          </Box>
+    <Box sx={{ px: 2.5, pb: 2, pt: 1.5 }}>
+      {/* Шапка уровня 2 */}
+      <Box sx={{
+        display: { xs: 'none', sm: 'grid' },
+        gridTemplateColumns: '24px 1fr 110px 90px 90px 120px',
+        gap: 1,
+        px: 1.5,
+        pb: 0.75,
+        mb: 0.5,
+        borderBottom: '1px solid var(--color-border)',
+      }}>
+        {['', 'Тип операции', 'Операций', 'АЕИ', 'Ставка (ср.)', 'Сумма'].map((h, i) => (
+          <Typography key={i} sx={{
+            fontSize: '0.625rem',
+            fontWeight: 700,
+            color: 'var(--color-text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            textAlign: i > 1 ? 'right' : 'left',
+          }}>
+            {h}
+          </Typography>
+        ))}
+      </Box>
 
-          {/* Operations for this date */}
-          {dayOps.map((op) => (
-            <Box
-              key={op.operation_id}
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 80px 100px 110px' },
-                gap: { xs: 0.5, sm: 1 },
-                alignItems: 'center',
-                px: 1.5,
-                py: 0.875,
-                mb: 0.5,
-                borderRadius: 1,
-                backgroundColor: 'var(--color-bg-elevated)',
-                border: '1px solid var(--color-border-subtle)',
-                transition: 'border-color 150ms ease',
-                '&:hover': { borderColor: 'var(--color-border)' },
-              }}
-            >
-              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                {op.operation_type}
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                {format(new Date(op.operation_date), 'HH:mm')}
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-                АЕИ: {op.aei_count}
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-                <CurrencyDisplay amount={op.rate || 0} variant="compact" />
-              </Typography>
-              <Box sx={{ textAlign: 'right' }}>
-                <Box
-                  component="span"
-                  sx={{
-                    color: 'var(--color-gold)',
-                    fontWeight: 700,
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.875rem',
-                    px: 1,
-                    py: 0.25,
-                    borderRadius: 1,
-                    backgroundColor: 'var(--color-gold-muted)',
-                    display: 'inline-block',
-                  }}
-                >
-                  <CurrencyDisplay amount={op.base_amount || 0} variant="compact" />
-                </Box>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      ))}
+      {data.map((group) => {
+        const key = `${employeeId}-${group.operation_type}-${group.participant_area || ''}`;
+        return (
+          <OperationGroup
+            key={key}
+            employeeId={employeeId}
+            group={group}
+            startDate={startDate}
+            endDate={endDate}
+            isExpanded={expandedOps.get(key) === true}
+            onToggle={() => onToggleOp(key)}
+          />
+        );
+      })}
     </Box>
   );
 };
@@ -401,9 +339,21 @@ const AdminPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
-  // Expandable rows
-  const [expandedId, setExpandedId] = useState<string | number | null>(null);
+  // Expandable rows (level 1 — employees)
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+
+  // Expandable operation groups (level 2 → 3)
+  // key: `${employeeId}-${operationType}-${participantArea}`
+  const [expandedOps, setExpandedOps] = useState<Map<string, boolean>>(new Map());
+
+  const handleToggleOp = useCallback((key: string) => {
+    setExpandedOps((prev) => {
+      const next = new Map(prev);
+      next.set(key, !prev.get(key));
+      return next;
+    });
+  }, []);
 
   // Debug panel
   const [debugVisible, setDebugVisible] = useState(false);
@@ -477,15 +427,17 @@ const AdminPage = () => {
   );
 
   // ── Expand/collapse row ──────────────────────────────────────────────────────
-  const handleToggleExpand = (emp: any) => {
+  const handleToggleExpand = useCallback((emp: any) => {
     if (expandedId === emp.user_id) {
       setExpandedId(null);
       setSelectedEmployee(null);
     } else {
       setExpandedId(emp.user_id);
       setSelectedEmployee(emp);
+      // Reset operation expand state for the newly opened employee
+      setExpandedOps(new Map());
     }
-  };
+  }, [expandedId]);
 
   // ── Export ───────────────────────────────────────────────────────────────────
   const handleExport = async () => {
@@ -500,6 +452,23 @@ const AdminPage = () => {
       link.remove();
     } catch {
       setError('Ошибка экспорта данных');
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const params: { startDate: string; endDate: string; employeeId?: number } = { startDate, endDate };
+      if (expandedId !== null) params.employeeId = expandedId;
+      const response = await adminAPI.exportExcel(params);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `salary_${startDate}_${endDate}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      setError('Ошибка экспорта Excel');
     }
   };
 
@@ -679,6 +648,24 @@ const AdminPage = () => {
           >
             CSV
           </Button>
+          <Tooltip title={expandedId ? `Excel: только ${selectedEmployee?.fio}` : 'Excel: все сотрудники'}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<TableChart />}
+              onClick={handleExportExcel}
+              sx={{
+                borderColor: alpha(TOKENS.success, 0.5),
+                color: TOKENS.success,
+                '&:hover': {
+                  borderColor: TOKENS.success,
+                  backgroundColor: alpha(TOKENS.success, 0.06),
+                },
+              }}
+            >
+              Excel
+            </Button>
+          </Tooltip>
         </Box>
       </Box>
 
@@ -896,6 +883,8 @@ const AdminPage = () => {
                                   employeeId={emp.user_id}
                                   startDate={startDate}
                                   endDate={endDate}
+                                  expandedOps={expandedOps}
+                                  onToggleOp={handleToggleOp}
                                 />
                               )}
                             </Box>
