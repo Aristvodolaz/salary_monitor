@@ -7,8 +7,9 @@ export default defineConfig({
     port: 3017,
     proxy: {
       '/api': {
-        target: 'http://localhost:3015',
+        target: 'http://localhost:3000',
         changeOrigin: true,
+        timeout: 300000, // 5 мин для Excel-выгрузки
       },
     },
   },

@@ -6,7 +6,9 @@ import {
   ParseIntPipe,
   UseGuards,
   Header,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -101,6 +103,61 @@ export class AdminController {
   ) {
     const parsedWarehouseId = warehouseId ? parseInt(warehouseId, 10) : undefined;
     return this.adminService.getWarehouseStats(user, parsedWarehouseId);
+  }
+
+  /**
+   * GET /api/admin/employees/:id/operations/summary
+   * Операции сотрудника, агрегированные по типу (уровень 2)
+   */
+  @Get('employees/:id/operations/summary')
+  async getEmployeeOperationsSummary(
+    @CurrentUser() user: any,
+    @Param('id', ParseIntPipe) employeeId: number,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.adminService.getEmployeeOperationsSummary(user, employeeId, startDate, endDate);
+  }
+
+  /**
+   * GET /api/admin/employees/:id/operations/details
+   * Детализация по конкретному типу операции (уровень 3, lazy)
+   */
+  @Get('employees/:id/operations/details')
+  async getEmployeeOperationDetails(
+    @CurrentUser() user: any,
+    @Param('id', ParseIntPipe) employeeId: number,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('operationType') operationType: string,
+    @Query('participantArea') participantArea = '',
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.adminService.getEmployeeOperationDetails(
+      user,
+      employeeId,
+      operationType,
+      participantArea,
+      startDate,
+      endDate,
+      limit ? parseInt(limit, 10) : 20,
+      offset ? parseInt(offset, 10) : 0,
+    );
+  }
+
+  /**
+   * GET /api/admin/export/excel
+   * Потоковая выгрузка Excel с иерархией
+   */
+  @Get('export/excel')
+  async exportExcel(
+    @CurrentUser() user: any,
+    @Res() res: Response,
+    @Query() query: GetWarehouseSalaryDto,
+  ) {
+    const { startDate, endDate, warehouseId, employeeId } = query;
+    await this.adminService.exportExcel(user, res, startDate, endDate, warehouseId, employeeId);
   }
 }
 

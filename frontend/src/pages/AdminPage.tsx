@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -107,37 +107,44 @@ interface ExpandedRowProps {
   endDate: string;
 }
 
+const PAGE_SIZE = 50;
+
 const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProps) => {
   const [ops, setOps] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError('');
-
-    adminAPI
-      .getEmployeeOperations(employeeId, startDate, endDate)
-      .then((res) => {
-        if (!cancelled) setOps(res.data?.operations || res.data || []);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          const status = err.response?.status;
-          if (status === 404) {
-            setError('Эндпоинт /admin/employees/{id}/operations не реализован на сервере');
-          } else {
-            setError(err.response?.data?.message || 'Ошибка загрузки операций');
-          }
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => { cancelled = true; };
+  const loadPage = useCallback(async (offset: number, append = false) => {
+    try {
+      if (append) setLoadingMore(true);
+      else setLoading(true);
+      const res = await adminAPI.getEmployeeOperations(employeeId, startDate, endDate, PAGE_SIZE, offset);
+      const data = res.data;
+      const list = data?.operations ?? data ?? [];
+      const pagTotal = data?.pagination?.total ?? list.length;
+      setOps((prev) => (append ? [...prev, ...list] : list));
+      setTotal(pagTotal);
+    } catch (err: any) {
+      const status = err.response?.status;
+      setError(
+        status === 404
+          ? 'Эндпоинт /admin/employees/{id}/operations не реализован на сервере'
+          : err.response?.data?.message || 'Ошибка загрузки операций'
+      );
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   }, [employeeId, startDate, endDate]);
+
+  useEffect(() => {
+    loadPage(0);
+  }, [loadPage]);
+
+  const hasMore = ops.length < total;
+  const handleLoadMore = () => loadPage(ops.length, true);
 
   if (loading) return <ExpandedSkeleton />;
 
@@ -169,6 +176,7 @@ const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProp
 
   return (
     <Box sx={{ px: 2.5, pb: 2, pt: 1 }}>
+      <Box sx={{ maxHeight: 420, overflowY: 'auto', pr: 0.5 }}>
       {Object.entries(grouped).map(([dateLabel, dayOps]) => (
         <Box key={dateLabel} sx={{ mb: 2 }}>
           {/* Date header */}
@@ -252,6 +260,19 @@ const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProp
           ))}
         </Box>
       ))}
+      </Box>
+      {hasMore && (
+        <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'center' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore ? 'Загрузка…' : `Загрузить ещё (${ops.length} из ${total})`}
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 };
@@ -407,6 +428,7 @@ const AdminPage = () => {
 
   // Debug panel
   const [debugVisible, setDebugVisible] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // ── Data loading ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -500,6 +522,29 @@ const AdminPage = () => {
       link.remove();
     } catch {
       setError('Ошибка экспорта данных');
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (exportingExcel) return;
+    setExportingExcel(true);
+    setError('');
+    try {
+      const params: { startDate: string; endDate: string; employeeId?: number } = { startDate, endDate };
+      if (expandedId !== null) params.employeeId = expandedId;
+      const response = await adminAPI.exportExcel(params);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `salary_${startDate}_${endDate}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err?.message?.includes('timeout') ? 'Таймаут. Попробуйте выгрузить по одному сотруднику.' : 'Ошибка экспорта Excel');
+    } finally {
+      setExportingExcel(false);
     }
   };
 
@@ -679,6 +724,19 @@ const AdminPage = () => {
           >
             CSV
           </Button>
+          <Tooltip title={expandedId ? `Excel: только ${selectedEmployee?.fio}` : 'Excel: все сотрудники'}>
+            <span>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<Download />}
+                onClick={handleExportExcel}
+                disabled={exportingExcel}
+              >
+                {exportingExcel ? 'Выгрузка…' : 'Excel'}
+              </Button>
+            </span>
+          </Tooltip>
         </Box>
       </Box>
 
@@ -777,10 +835,9 @@ const AdminPage = () => {
                 {pageData.map((emp) => {
                   const isExpanded = expandedId === emp.user_id;
                   return (
-                    <>
+                    <React.Fragment key={emp.user_id}>
                       {/* Main row */}
                       <TableRow
-                        key={emp.user_id}
                         onClick={() => handleToggleExpand(emp)}
                         sx={{
                           cursor: 'pointer',
@@ -869,7 +926,7 @@ const AdminPage = () => {
                       </TableRow>
 
                       {/* Expanded row */}
-                      <TableRow key={`${emp.user_id}-expanded`}>
+                      <TableRow>
                         <TableCell colSpan={6} sx={{ p: 0, border: 'none' }}>
                           <Collapse in={isExpanded} timeout={250} unmountOnExit>
                             <Box
@@ -902,7 +959,7 @@ const AdminPage = () => {
                           </Collapse>
                         </TableCell>
                       </TableRow>
-                    </>
+                    </React.Fragment>
                   );
                 })}
               </TableBody>

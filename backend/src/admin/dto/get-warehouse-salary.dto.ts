@@ -12,5 +12,10 @@ export class GetWarehouseSalaryDto {
   @IsInt()
   @IsOptional()
   warehouseId?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @IsOptional()
+  employeeId?: number;
 }
 

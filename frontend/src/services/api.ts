@@ -67,6 +67,17 @@ export const adminAPI = {
     api.get(`/admin/employees/${employeeId}/operations`, {
       params: { startDate, endDate, limit, offset },
     }),
+  exportExcel: (params: {
+    startDate: string;
+    endDate: string;
+    employeeId?: number;
+    warehouseId?: number;
+  }) =>
+    api.get('/admin/export/excel', {
+      params,
+      responseType: 'blob',
+      timeout: 300000, // 5 мин — стриминг по сотрудникам
+    }),
 };
 
 export const usersAPI = {
