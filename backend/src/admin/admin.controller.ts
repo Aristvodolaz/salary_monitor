@@ -70,42 +70,6 @@ export class AdminController {
   }
 
   /**
-   * GET /api/admin/employees/:id/operations
-   * Операции конкретного сотрудника за период (с пагинацией)
-   */
-  @Get('employees/:id/operations')
-  async getEmployeeOperations(
-    @CurrentUser() user: any,
-    @Param('id', ParseIntPipe) employeeId: number,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
-    return this.adminService.getEmployeeOperations(
-      user,
-      employeeId,
-      startDate,
-      endDate,
-      limit ? parseInt(limit, 10) : 50,
-      offset ? parseInt(offset, 10) : 0,
-    );
-  }
-
-  /**
-   * GET /api/admin/stats
-   * Статистика склада
-   */
-  @Get('stats')
-  async getStats(
-    @CurrentUser() user: any,
-    @Query('warehouseId') warehouseId?: string,
-  ) {
-    const parsedWarehouseId = warehouseId ? parseInt(warehouseId, 10) : undefined;
-    return this.adminService.getWarehouseStats(user, parsedWarehouseId);
-  }
-
-  /**
    * GET /api/admin/employees/:id/operations/summary
    * Операции сотрудника, агрегированные по типу (уровень 2)
    */
@@ -144,6 +108,42 @@ export class AdminController {
       limit ? parseInt(limit, 10) : 20,
       offset ? parseInt(offset, 10) : 0,
     );
+  }
+
+  /**
+   * GET /api/admin/employees/:id/operations
+   * Операции конкретного сотрудника за период (с пагинацией)
+   */
+  @Get('employees/:id/operations')
+  async getEmployeeOperations(
+    @CurrentUser() user: any,
+    @Param('id', ParseIntPipe) employeeId: number,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.adminService.getEmployeeOperations(
+      user,
+      employeeId,
+      startDate,
+      endDate,
+      limit ? parseInt(limit, 10) : 50,
+      offset ? parseInt(offset, 10) : 0,
+    );
+  }
+
+  /**
+   * GET /api/admin/stats
+   * Статистика склада
+   */
+  @Get('stats')
+  async getStats(
+    @CurrentUser() user: any,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
+    const parsedWarehouseId = warehouseId ? parseInt(warehouseId, 10) : undefined;
+    return this.adminService.getWarehouseStats(user, parsedWarehouseId);
   }
 
   /**
