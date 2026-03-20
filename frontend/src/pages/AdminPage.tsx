@@ -531,7 +531,7 @@ const AdminPage = () => {
     setError('');
     try {
       const params: { startDate: string; endDate: string; employeeId?: number } = { startDate, endDate };
-      if (expandedId !== null) params.employeeId = expandedId;
+      if (expandedId !== null) params.employeeId = Number(expandedId);
       const response = await adminAPI.exportExcel(params);
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');

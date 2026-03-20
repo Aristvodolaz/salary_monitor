@@ -14,7 +14,8 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { TOKENS } from '../../theme';
 import CurrencyDisplay from '../CurrencyDisplay';
-import { adminAPI } from '../../services/api';
+import type { AxiosResponse } from 'axios';
+import { adminAPI, type OperationDetailsResponse, type OperationRecord } from '../../services/api';
 
 const PAGE_SIZE = 20;
 
@@ -49,7 +50,7 @@ export const OperationDetails = memo(({
           PAGE_SIZE,
           offset,
         )
-        .then((res) => res.data),
+        .then((res: AxiosResponse<OperationDetailsResponse>) => res.data),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -139,7 +140,7 @@ export const OperationDetails = memo(({
       </Box>
 
       {/* Строки */}
-      {records.map((rec) => {
+      {records.map((rec: OperationRecord) => {
         let dateLabel = '—';
         try {
           const d = new Date(rec.operation_date);

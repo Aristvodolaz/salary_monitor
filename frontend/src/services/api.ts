@@ -1,5 +1,31 @@
 import axios from 'axios';
 
+// ── Types ──────────────────────────────────────────────────────────────────────
+export interface OperationSummary {
+  operation_type: string;
+  participant_area: string;
+  operations_count: number;
+  total_aei: number;
+  total_amount: number;
+  avg_rate: number;
+  first_date: string;
+  last_date: string;
+}
+
+export interface OperationRecord {
+  operation_id: number;
+  operation_date: string;
+  aei_count: number;
+  rate: number;
+  base_amount: number;
+  participant_area?: string;
+}
+
+export interface OperationDetailsResponse {
+  records: OperationRecord[];
+  pagination: { total: number; limit: number; offset: number };
+}
+
 const api = axios.create({
   baseURL: '/api',
   timeout: 10000,
@@ -66,6 +92,26 @@ export const adminAPI = {
   ) =>
     api.get(`/admin/employees/${employeeId}/operations`, {
       params: { startDate, endDate, limit, offset },
+    }),
+  getEmployeeOperationsSummary: (
+    employeeId: string | number,
+    startDate: string,
+    endDate: string,
+  ) =>
+    api.get<OperationSummary[]>(`/admin/employees/${employeeId}/operations/summary`, {
+      params: { startDate, endDate },
+    }),
+  getEmployeeOperationDetails: (
+    employeeId: string | number,
+    operationType: string,
+    participantArea: string,
+    startDate: string,
+    endDate: string,
+    limit = 20,
+    offset = 0,
+  ) =>
+    api.get<OperationDetailsResponse>(`/admin/employees/${employeeId}/operations/details`, {
+      params: { startDate, endDate, operationType, participantArea, limit, offset },
     }),
   exportExcel: (params: {
     startDate: string;
