@@ -19,7 +19,11 @@ export const PageHeader = ({ title, subtitle, actions }: PageHeaderProps) => (
       }}
     >
       <Box>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}>
+        <Typography
+          variant="h4"
+          component="h1"
+          sx={{ fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.2 }}
+        >
           {title}
         </Typography>
         {subtitle && (

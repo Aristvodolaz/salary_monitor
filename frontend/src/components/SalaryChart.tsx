@@ -13,7 +13,6 @@ import { ru } from 'date-fns/locale';
 import { TrendingUp, TrendingDown, InfoOutlined } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import CurrencyDisplay from './CurrencyDisplay';
-import { TOKENS } from '../theme';
 
 interface SalaryChartProps {
   data: Array<{
@@ -29,6 +28,10 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
   const textSecondary = muiTheme.palette.text.secondary;
   const borderColor = muiTheme.palette.divider;
   const bgBase = muiTheme.palette.background.default;
+  const primaryColor = muiTheme.palette.primary.main;
+  const accentColor = muiTheme.palette.secondary.main;
+  const successColor = muiTheme.palette.success.main;
+  const errorColor = muiTheme.palette.error.main;
 
   const chartData = data
     .filter((item) => item && item.total_amount !== null && item.total_amount !== undefined)
@@ -131,11 +134,11 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                     borderRadius: 99,
                     border: '1px solid',
                     borderColor: trend.isPositive
-                      ? alpha(TOKENS.success, 0.4)
-                      : alpha(TOKENS.error, 0.4),
+                      ? alpha(successColor, 0.4)
+                      : alpha(errorColor, 0.4),
                     backgroundColor: trend.isPositive
-                      ? alpha(TOKENS.success, 0.08)
-                      : alpha(TOKENS.error, 0.08),
+                      ? alpha(successColor, 0.08)
+                      : alpha(errorColor, 0.08),
                     color: trend.isPositive ? 'var(--color-success)' : 'var(--color-error)',
                     fontWeight: 700,
                     fontSize: '0.8125rem',
@@ -160,13 +163,15 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                 <ResponsiveContainer width="100%" height={320}>
                   <ComposedChart
                     data={chartData}
+                    role="img"
+                    aria-label={title}
                     margin={{ top: 16, right: 16, left: 0, bottom: 16 }}
                   >
                     <defs>
                       <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={TOKENS.red} stopOpacity={0.6} />
-                        <stop offset="60%" stopColor={TOKENS.red} stopOpacity={0.15} />
-                        <stop offset="95%" stopColor={TOKENS.red} stopOpacity={0} />
+                        <stop offset="5%"  stopColor={primaryColor} stopOpacity={0.6} />
+                        <stop offset="60%" stopColor={primaryColor} stopOpacity={0.15} />
+                        <stop offset="95%" stopColor={primaryColor} stopOpacity={0} />
                       </linearGradient>
                       <filter id="shadow">
                         <feDropShadow dx="0" dy="4" stdDeviation="4" floodOpacity="0.25" />
@@ -187,7 +192,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                       stroke={borderColor}
                       tickFormatter={(value) => value.toLocaleString('ru-RU')}
                       label={{
-                        value: 'K',
+                        value: 'руб.',
                         angle: 0,
                         position: 'top',
                         offset: 10,
@@ -196,13 +201,13 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                     />
                     <Tooltip
                       content={<CustomTooltip />}
-                      cursor={{ fill: alpha(TOKENS.red, 0.06) }}
+                      cursor={{ fill: alpha(primaryColor, 0.06) }}
                     />
                     <Area
                       type="monotone"
                       dataKey="amount"
                       name="Заработок"
-                      stroke={TOKENS.red}
+                      stroke={primaryColor}
                       strokeWidth={2.5}
                       fillOpacity={1}
                       fill="url(#colorAmount)"
@@ -210,14 +215,14 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                       animationBegin={200}
                       dot={{
                         r: 4,
-                        fill: TOKENS.red,
+                        fill: primaryColor,
                         strokeWidth: 2,
                         stroke: bgBase,
                         filter: 'url(#shadow)',
                       }}
                       activeDot={{
                         r: 7,
-                        fill: TOKENS.gold,
+                        fill: accentColor,
                         strokeWidth: 3,
                         stroke: bgBase,
                         filter: 'url(#shadow)',

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Box, Grid, Alert } from '@mui/material';
+import { Box, Grid, Alert, Button } from '@mui/material';
+import { Refresh } from '@mui/icons-material';
 import { salaryAPI, operationsAPI } from '../services/api';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -59,10 +60,6 @@ const DashboardPage = () => {
     }
   };
 
-  if (error) {
-    return <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>;
-  }
-
   const currentMonth = format(new Date(), 'LLLL yyyy', { locale: ru });
   const prevMonthLabel = format(subMonths(new Date(), 1), 'LLLL', { locale: ru });
 
@@ -70,12 +67,32 @@ const DashboardPage = () => {
     <Box sx={{ pb: { xs: 10, md: 3 } }}>
       <PageHeader title="Мой баланс" subtitle={currentMonth} />
 
-      <Grid container spacing={3}>
-        {/* Hero — текущий месяц (8/12 на md+) */}
-        <Grid item xs={12} md={8}>
+      {error && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              startIcon={<Refresh fontSize="small" />}
+              onClick={loadData}
+            >
+              Повторить
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
+
+      <Grid container spacing={3} alignItems="flex-start">
+        {/* Hero — текущий месяц */}
+        <Grid item xs={12} md={6}>
           <StatCard
             label="Текущий месяц"
             variant="hero"
+            sx={{ height: '100%' }}
             loading={loading}
             value={
               <CurrencyDisplay
@@ -90,44 +107,41 @@ const DashboardPage = () => {
           />
         </Grid>
 
-        {/* Secondary column (4/12 на md+) */}
-        <Grid item xs={12} md={4}>
-          <Grid container spacing={3}>
-            <Grid item xs={6} md={12}>
-              <StatCard
-                label="Вчера"
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            label="Вчера"
+            variant="default"
+            sx={{ height: '100%' }}
+            loading={loading}
+            value={
+              <CurrencyDisplay
+                amount={yesterdayData?.total_amount || 0}
                 variant="default"
-                loading={loading}
-                value={
-                  <CurrencyDisplay
-                    amount={yesterdayData?.total_amount || 0}
-                    variant="default"
-                  />
-                }
-                subStats={[
-                  { label: 'Операций', value: yesterdayData?.operations_count || 0 },
-                  { label: 'АЕИ', value: yesterdayData?.total_aei || 0 },
-                ]}
               />
-            </Grid>
-            <Grid item xs={6} md={12}>
-              <StatCard
-                label={prevMonthLabel}
-                variant="muted"
-                loading={loading}
-                value={
-                  <CurrencyDisplay
-                    amount={previousMonthData?.total_amount || 0}
-                    variant="default"
-                  />
-                }
-                subStats={[
-                  { label: 'Операций', value: previousMonthData?.operations_count || 0 },
-                  { label: 'АЕИ', value: previousMonthData?.total_aei || 0 },
-                ]}
+            }
+            subStats={[
+              { label: 'Операций', value: yesterdayData?.operations_count || 0 },
+              { label: 'АЕИ', value: yesterdayData?.total_aei || 0 },
+            ]}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            label={prevMonthLabel}
+            variant="muted"
+            sx={{ height: '100%' }}
+            loading={loading}
+            value={
+              <CurrencyDisplay
+                amount={previousMonthData?.total_amount || 0}
+                variant="default"
               />
-            </Grid>
-          </Grid>
+            }
+            subStats={[
+              { label: 'Операций', value: previousMonthData?.operations_count || 0 },
+              { label: 'АЕИ', value: previousMonthData?.total_aei || 0 },
+            ]}
+          />
         </Grid>
 
         {/* Chart */}

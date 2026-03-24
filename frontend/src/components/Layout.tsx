@@ -56,7 +56,12 @@ const ThemeToggleButton = () => {
 
   return (
     <Tooltip title={tooltip}>
-      <IconButton onClick={toggleMode} size="small" sx={{ color: 'var(--color-text-secondary)' }}>
+      <IconButton
+        onClick={toggleMode}
+        size="small"
+        sx={{ color: 'var(--color-text-secondary)' }}
+        aria-label={tooltip}
+      >
         {icon}
       </IconButton>
     </Tooltip>
@@ -68,15 +73,14 @@ const Layout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const isAdmin = user?.role === 'admin';
 
-  const menuItems = [
-    { text: 'Дашборд', icon: <Dashboard />, path: '/' },
-    { text: 'Операции', icon: <ListAlt />, path: '/operations' },
-  ];
-
-  if (user?.role === 'admin') {
-    menuItems.push({ text: 'Админ-панель', icon: <AdminPanelSettings />, path: '/admin' });
-  }
+  const menuItems = isAdmin
+    ? [{ text: 'Админ-панель', icon: <AdminPanelSettings />, path: '/admin' }]
+    : [
+        { text: 'Дашборд', icon: <Dashboard />, path: '/' },
+        { text: 'Операции', icon: <ListAlt />, path: '/operations' },
+      ];
 
   const handleLogout = () => {
     logout();
@@ -251,6 +255,7 @@ const Layout = () => {
       {/* Desktop permanent sidebar */}
       <Drawer
         variant="permanent"
+        aria-label="Боковая навигация"
         sx={{
           display: { xs: 'none', md: 'block' },
           '& .MuiDrawer-paper': {
@@ -268,6 +273,7 @@ const Layout = () => {
       {/* Mobile top AppBar — logo + title + theme toggle (no hamburger) */}
       <AppBar
         position="fixed"
+        aria-label="Верхняя панель"
         sx={{
           display: { xs: 'flex', md: 'none' },
           left: 0,
@@ -318,6 +324,8 @@ const Layout = () => {
 
       {/* Mobile bottom navigation */}
       <Paper
+        component="nav"
+        aria-label="Нижняя навигация"
         sx={{
           display: { xs: 'block', md: 'none' },
           position: 'fixed',
@@ -336,21 +344,28 @@ const Layout = () => {
             if (newPath !== '__logout__') navigate(newPath);
           }}
         >
-          <BottomNavigationAction
-            label="Дашборд"
-            icon={<Dashboard />}
-            value="/"
-          />
-          <BottomNavigationAction
-            label="Операции"
-            icon={<ListAlt />}
-            value="/operations"
-          />
-          {user?.role === 'admin' && (
+          {!isAdmin && (
+            <BottomNavigationAction
+              label="Дашборд"
+              icon={<Dashboard />}
+              value="/"
+              aria-label="Перейти на дашборд"
+            />
+          )}
+          {!isAdmin && (
+            <BottomNavigationAction
+              label="Операции"
+              icon={<ListAlt />}
+              value="/operations"
+              aria-label="Перейти на операции"
+            />
+          )}
+          {isAdmin && (
             <BottomNavigationAction
               label="Админ"
               icon={<AdminPanelSettings />}
               value="/admin"
+              aria-label="Перейти в админ-панель"
             />
           )}
           <BottomNavigationAction
@@ -358,6 +373,7 @@ const Layout = () => {
             icon={<Logout />}
             value="__logout__"
             onClick={handleLogout}
+            aria-label="Выйти из аккаунта"
             sx={{
               color: `${alpha(TOKENS.error, 0.8)} !important`,
               '&.Mui-selected': { color: `${TOKENS.error} !important` },

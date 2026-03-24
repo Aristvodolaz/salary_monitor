@@ -45,7 +45,12 @@ export const StatCard = ({
         ...sx,
       }}
     >
-      <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
+      <CardContent
+        sx={{
+          p: isHero ? 2.25 : 3,
+          '&:last-child': { pb: isHero ? 2.25 : 3 },
+        }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
           <Typography
             sx={{
@@ -85,7 +90,7 @@ export const StatCard = ({
 
         <Box
           sx={{
-            fontSize: isHero ? '2rem' : '1.5rem',
+            fontSize: isHero ? '1.75rem' : '1.5rem',
             fontWeight: 700,
             color: isHero ? 'var(--color-gold)' : 'var(--color-text-primary)',
             mb: subStats?.length ? 2 : 0,

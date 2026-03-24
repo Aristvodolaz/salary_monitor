@@ -13,17 +13,6 @@ interface OperationsDonutChartProps {
   period?: string;
 }
 
-const COLORS = [
-  '#E31E24',  // KOMUS Red
-  '#F59E0B',  // Gold
-  '#10B981',  // Emerald
-  '#3B82F6',  // Blue
-  '#8B5CF6',  // Violet
-  '#EC4899',  // Pink
-  '#06B6D4',  // Cyan
-  '#F97316',  // Orange
-];
-
 const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
   data,
   period = 'текущий месяц',
@@ -31,6 +20,16 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
   const muiTheme = useTheme();
   const textSecondary = muiTheme.palette.text.secondary;
   const fontMono = '"JetBrains Mono", "Fira Code", monospace';
+  const chartPalette = [
+    muiTheme.palette.primary.main,
+    muiTheme.palette.secondary.main,
+    muiTheme.palette.success.main,
+    muiTheme.palette.info.main,
+    muiTheme.palette.warning.main,
+    '#8B5CF6',
+    '#06B6D4',
+    '#F97316',
+  ];
 
   const chartData = data
     .filter(
@@ -42,7 +41,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
       value: parseFloat((item.total_amount || 0).toFixed(2)),
       operations: item.operations_count || 0,
       aei: item.total_aei || 0,
-      color: COLORS[index % COLORS.length],
+      color: chartPalette[index % chartPalette.length],
     }));
 
   const totalAmount = chartData.reduce((sum, item) => sum + item.value, 0);
@@ -140,7 +139,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
                 }}
               >
                 <ResponsiveContainer width="100%" height={260}>
-                  <PieChart>
+                  <PieChart role="img" aria-label={`Распределение расценок по типам операций за период ${period}`}>
                     <Pie
                       data={chartData}
                       cx="50%"
