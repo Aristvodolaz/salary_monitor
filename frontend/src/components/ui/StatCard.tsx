@@ -37,18 +37,23 @@ export const StatCard = ({
     <Card
       sx={{
         height: '100%',
+        backgroundImage: isHero
+          ? 'linear-gradient(135deg, var(--color-gold-muted) 0%, var(--color-bg-surface) 65%)'
+          : isMuted
+            ? 'linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg-surface) 70%)'
+            : 'none',
         ...(isHero && {
           border: '2px solid var(--color-gold)',
           boxShadow: '0 0 32px var(--color-gold-glow)',
         }),
-        ...(isMuted && { opacity: 0.75 }),
+        ...(isMuted && { opacity: 0.9 }),
         ...sx,
       }}
     >
       <CardContent
         sx={{
-          p: isHero ? 2.25 : 3,
-          '&:last-child': { pb: isHero ? 2.25 : 3 },
+          p: isHero ? 2.25 : 2.5,
+          '&:last-child': { pb: isHero ? 2.25 : 2.5 },
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
@@ -90,7 +95,7 @@ export const StatCard = ({
 
         <Box
           sx={{
-            fontSize: isHero ? '1.75rem' : '1.5rem',
+            fontSize: isHero ? '1.75rem' : '1.375rem',
             fontWeight: 700,
             color: isHero ? 'var(--color-gold)' : 'var(--color-text-primary)',
             mb: subStats?.length ? 2 : 0,

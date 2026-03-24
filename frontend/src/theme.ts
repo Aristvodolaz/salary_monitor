@@ -202,8 +202,21 @@ export function createAppTheme(mode: 'light' | 'dark') {
             --font-display:         ${b.fontDisplay};
             --font-mono:            ${b.fontMono};
           }
-          html, body { background-color: ${t.bgBase}; }
+          html, body {
+            background-color: ${t.bgBase};
+            background-image:
+              radial-gradient(circle at 10% 10%, ${alpha(b.red, isDark ? 0.08 : 0.04)} 0%, transparent 35%),
+              radial-gradient(circle at 90% 0%, ${alpha(t.gold, isDark ? 0.08 : 0.04)} 0%, transparent 30%);
+          }
+          ::selection {
+            background: ${alpha(b.red, 0.22)};
+            color: ${t.textPrimary};
+          }
           * { box-sizing: border-box; }
+          *:focus-visible {
+            outline: 2px solid ${alpha(b.red, 0.7)};
+            outline-offset: 2px;
+          }
           ::-webkit-scrollbar { width: 6px; height: 6px; }
           ::-webkit-scrollbar-track { background: ${t.bgBase}; }
           ::-webkit-scrollbar-thumb { background: ${t.border}; border-radius: 3px; }
@@ -273,7 +286,12 @@ export function createAppTheme(mode: 'light' | 'dark') {
             border: `1px solid ${t.border}`,
             borderRadius: 12,
             boxShadow: isDark ? 'none' : '0 1px 4px rgba(0,0,0,0.06)',
-            transition: 'border-color 200ms ease, box-shadow 200ms ease',
+            transition: 'border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease',
+            '&:hover': {
+              borderColor: t.borderHover,
+              boxShadow: isDark ? '0 6px 20px rgba(0,0,0,0.35)' : '0 8px 24px rgba(15,17,40,0.12)',
+              transform: 'translateY(-1px)',
+            },
           },
         },
       },

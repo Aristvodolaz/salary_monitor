@@ -16,6 +16,7 @@ import {
   TableSortLabel,
 } from '@mui/material';
 import { Search, FilterAltOff } from '@mui/icons-material';
+import { Refresh } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { operationsAPI } from '../services/api';
 import { format } from 'date-fns';
@@ -307,6 +308,7 @@ const OperationsPage = () => {
           backgroundColor: 'var(--color-bg-surface)',
           border: '1px solid var(--color-border)',
           borderRadius: 2,
+          boxShadow: '0 2px 10px rgba(15,17,40,0.04)',
         }}
       >
         <TextField
@@ -343,13 +345,29 @@ const OperationsPage = () => {
           )}
         </Box>
         <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
-          <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)' }}>
+          <Typography
+            variant="body2"
+            aria-live="polite"
+            sx={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}
+          >
             {loading ? '...' : `Найдено: ${total}`}
           </Typography>
         </Box>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" startIcon={<Refresh fontSize="small" />} onClick={loadOperations}>
+              Повторить
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
 
       {/* ── MOBILE: Card list ── */}
       {isMobile && (
@@ -460,7 +478,13 @@ const OperationsPage = () => {
                 </TableHead>
                 <TableBody>
                   {operations.map((op) => (
-                    <TableRow key={op.operation_id}>
+                    <TableRow
+                      key={op.operation_id}
+                      sx={{
+                        transition: 'background-color 120ms ease',
+                        '&:hover': { backgroundColor: 'var(--color-surface-hover)' },
+                      }}
+                    >
                       <TableCell sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem' }}>
                         {format(new Date(op.operation_date), 'dd.MM.yyyy HH:mm')}
                       </TableCell>

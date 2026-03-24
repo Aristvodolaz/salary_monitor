@@ -59,6 +59,7 @@ const PERIOD_PRESETS: { value: Period; label: string }[] = [
   { value: 'month', label: 'Месяц' },
   { value: 'custom', label: 'Период' },
 ];
+const ADMIN_SMART_DEFAULTS_KEY = 'bm_admin_smart_defaults_v1';
 
 const getInitials = (fio: string) =>
   fio.split(' ').slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
@@ -425,6 +426,27 @@ const AdminPage = () => {
   // Debug panel
   const [debugVisible, setDebugVisible] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ADMIN_SMART_DEFAULTS_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { period?: Period; startDate?: string; endDate?: string };
+      if (saved.period) setPeriod(saved.period);
+      if (saved.startDate) setStartDate(saved.startDate);
+      if (saved.endDate) setEndDate(saved.endDate);
+    } catch {
+      // ignore corrupted storage
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(
+      ADMIN_SMART_DEFAULTS_KEY,
+      JSON.stringify({ period, startDate, endDate }),
+    );
+  }, [period, startDate, endDate]);
 
   // ── Data loading ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -574,6 +596,82 @@ const AdminPage = () => {
     }
   };
 
+  const applySavedRange = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(ADMIN_SMART_DEFAULTS_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { period?: Period; startDate?: string; endDate?: string };
+      if (saved.period) setPeriod(saved.period);
+      if (saved.startDate) setStartDate(saved.startDate);
+      if (saved.endDate) setEndDate(saved.endDate);
+      setPage(0);
+    } catch {
+      // ignore corrupted storage
+    }
+  }, []);
+
+  useEffect(() => {
+    const isTypingContext = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      if (!element) return false;
+      const tag = element.tagName?.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || element.isContentEditable;
+    };
+
+    const hasOpenDialog = () => Boolean(document.querySelector('[role="dialog"]'));
+
+    const onAdminHotkeys = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (hasOpenDialog()) return;
+      if (isTypingContext(event.target)) return;
+
+      const key = event.key.toLowerCase();
+      if (key === 'f') {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (key === 'r') {
+        event.preventDefault();
+        loadData();
+      } else if (key === 'e') {
+        event.preventDefault();
+        handleExportExcel();
+      } else if (key === 'escape' && expandedId !== null) {
+        event.preventDefault();
+        setExpandedId(null);
+        setSelectedEmployee(null);
+      }
+    };
+
+    window.addEventListener('keydown', onAdminHotkeys);
+    return () => window.removeEventListener('keydown', onAdminHotkeys);
+  }, [expandedId]);
+
+  useEffect(() => {
+    const onRefresh = () => { loadData(); };
+    const onExportCsv = () => { handleExport(); };
+    const onExportExcel = () => { handleExportExcel(); };
+    const onSetPeriod = (event: Event) => {
+      const customEvent = event as CustomEvent<{ period?: Period }>;
+      const nextPeriod = customEvent.detail?.period;
+      if (nextPeriod) applyPeriod(nextPeriod);
+    };
+    const onApplySavedRange = () => { applySavedRange(); };
+
+    window.addEventListener('bm:admin-refresh', onRefresh);
+    window.addEventListener('bm:admin-export-csv', onExportCsv);
+    window.addEventListener('bm:admin-export-excel', onExportExcel);
+    window.addEventListener('bm:admin-set-period', onSetPeriod as EventListener);
+    window.addEventListener('bm:admin-apply-saved-range', onApplySavedRange);
+
+    return () => {
+      window.removeEventListener('bm:admin-refresh', onRefresh);
+      window.removeEventListener('bm:admin-export-csv', onExportCsv);
+      window.removeEventListener('bm:admin-export-excel', onExportExcel);
+      window.removeEventListener('bm:admin-set-period', onSetPeriod as EventListener);
+      window.removeEventListener('bm:admin-apply-saved-range', onApplySavedRange);
+    };
+  }, [applyPeriod, applySavedRange]);
+
   // ── Stat cards ───────────────────────────────────────────────────────────────
   const statCards = [
     { label: 'Активных сотрудников', icon: People, value: stats?.active_employees || 0, color: TOKENS.info },
@@ -697,6 +795,7 @@ const AdminPage = () => {
           backgroundColor: 'var(--color-bg-surface)',
           border: '1px solid var(--color-border)',
           borderRadius: 2,
+          boxShadow: '0 2px 10px rgba(15,17,40,0.04)',
         }}
       >
         {/* Period chips */}
@@ -771,6 +870,7 @@ const AdminPage = () => {
         <TextField
           fullWidth
           size="small"
+          inputRef={searchInputRef}
           placeholder="Поиск по имени или ШК сотрудника..."
           value={searchInput}
           onChange={(e) => handleSearchChange(e.target.value)}
@@ -794,6 +894,7 @@ const AdminPage = () => {
           }}
           sx={{
             '& .MuiInputBase-input::placeholder': { color: 'var(--color-text-muted)' },
+            '& .MuiOutlinedInput-root': { backgroundColor: 'var(--color-bg-surface)' },
           }}
         />
         {search && !loading && (
@@ -802,6 +903,40 @@ const AdminPage = () => {
           </Typography>
         )}
       </Box>
+
+      {expandedId !== null && selectedEmployee && (
+        <Box
+          sx={{
+            mb: 2,
+            p: 1.25,
+            borderRadius: 2,
+            border: '1px solid var(--color-border)',
+            backgroundColor: 'var(--color-bg-surface)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Typography sx={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+            Выбран сотрудник: <Box component="span" sx={{ color: 'var(--color-text-primary)', fontWeight: 700 }}>{selectedEmployee.fio}</Box>
+          </Typography>
+          <Button size="small" variant="outlined" startIcon={<Download />} onClick={handleExportExcel} disabled={exportingExcel}>
+            Excel по сотруднику
+          </Button>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => {
+              setExpandedId(null);
+              setSelectedEmployee(null);
+            }}
+          >
+            Снять выбор
+          </Button>
+          <Chip size="small" label="Hotkeys: F поиск · R обновить · E excel" />
+        </Box>
+      )}
 
       {/* ── Employee table ── */}
       <Box
@@ -812,10 +947,17 @@ const AdminPage = () => {
           overflow: 'hidden',
         }}
       >
-        <Box sx={{ px: 3, pt: 2.5, pb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--color-text-primary)', fontSize: '1rem' }}>
-            Зарплаты за период
-          </Typography>
+        <Box sx={{ px: 3, pt: 2.5, pb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--color-text-primary)', fontSize: '1rem' }}>
+              Зарплаты за период
+            </Typography>
+            {!loading && (
+              <Typography variant="caption" sx={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                Сотрудников: {filtered.length}
+              </Typography>
+            )}
+          </Box>
           <Typography variant="caption" sx={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
             {periodLabel} · {startDate} — {endDate}
           </Typography>
@@ -843,8 +985,8 @@ const AdminPage = () => {
             description={search ? `По запросу "${search}" ничего не найдено` : 'Попробуйте изменить диапазон дат'}
           />
         ) : (
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ width: 40, p: '12px 8px' }} />
@@ -907,6 +1049,16 @@ const AdminPage = () => {
                       {/* Main row */}
                       <TableRow
                         onClick={() => handleToggleExpand(emp)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleToggleExpand(emp);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isExpanded}
+                        aria-label={`Показать операции сотрудника ${emp.fio}`}
                         sx={{
                           cursor: 'pointer',
                           '&:hover': { backgroundColor: alpha(TOKENS.red, 0.04) },

@@ -16,9 +16,12 @@ export const EmptyState = ({ icon, title, description, action }: EmptyStateProps
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        py: 10,
+        py: 7,
         px: 3,
         textAlign: 'center',
+        border: '1px dashed var(--color-border)',
+        borderRadius: 2,
+        backgroundColor: 'var(--color-bg-elevated)',
       }}
     >
       <Box
@@ -30,7 +33,7 @@ export const EmptyState = ({ icon, title, description, action }: EmptyStateProps
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          mb: 3,
+          mb: 2,
           '& .MuiSvgIcon-root': {
             fontSize: 28,
             color: 'var(--color-text-muted)',

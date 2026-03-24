@@ -29,6 +29,8 @@ import { alpha } from '@mui/material/styles';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import { TOKENS } from '../theme';
+import { useEffect, useState } from 'react';
+import { CommandPalette } from './CommandPalette';
 
 const SIDEBAR_WIDTH = 240;
 
@@ -71,9 +73,11 @@ const ThemeToggleButton = () => {
 // ── Layout ─────────────────────────────────────────────────────────────────────
 const Layout = () => {
   const { user, logout } = useAuth();
+  const { toggleMode } = useThemeContext();
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = user?.role === 'admin';
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const menuItems = isAdmin
     ? [{ text: 'Админ-панель', icon: <AdminPanelSettings />, path: '/admin' }]
@@ -86,6 +90,18 @@ const Layout = () => {
     logout();
     navigate('/login');
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isCmdK = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k';
+      if (!isCmdK) return;
+      event.preventDefault();
+      setPaletteOpen((prev) => !prev);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const sidebarContent = (
     <Box
@@ -162,7 +178,27 @@ const Layout = () => {
           <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
             Тема
           </Typography>
-          <ThemeToggleButton />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              component="button"
+              onClick={() => setPaletteOpen(true)}
+              sx={{
+                border: '1px solid var(--color-border)',
+                backgroundColor: 'var(--color-bg-elevated)',
+                borderRadius: 1,
+                px: 0.75,
+                py: 0.25,
+                fontSize: '0.6875rem',
+                color: 'var(--color-text-muted)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                '&:hover': { borderColor: 'var(--color-border-hover)', color: 'var(--color-text-secondary)' },
+              }}
+            >
+              Ctrl+K
+            </Typography>
+            <ThemeToggleButton />
+          </Box>
         </Box>
       </Box>
 
@@ -252,6 +288,35 @@ const Layout = () => {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: 'background.default' }}>
+      <Box
+        component="a"
+        href="#main-content"
+        sx={{
+          position: 'absolute',
+          left: -9999,
+          top: 'auto',
+          width: 1,
+          height: 1,
+          overflow: 'hidden',
+          '&:focus': {
+            left: 12,
+            top: 12,
+            width: 'auto',
+            height: 'auto',
+            zIndex: (theme) => theme.zIndex.tooltip + 1,
+            px: 1.5,
+            py: 0.75,
+            borderRadius: 1,
+            backgroundColor: 'var(--color-bg-surface)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text-primary)',
+            textDecoration: 'none',
+          },
+        }}
+      >
+        Перейти к основному контенту
+      </Box>
+
       {/* Desktop permanent sidebar */}
       <Drawer
         variant="permanent"
@@ -308,6 +373,7 @@ const Layout = () => {
 
       {/* Main content */}
       <Box
+        id="main-content"
         component="main"
         sx={{
           flexGrow: 1,
@@ -319,7 +385,9 @@ const Layout = () => {
           backgroundColor: 'background.default',
         }}
       >
-        <Outlet />
+        <Box sx={{ width: '100%', maxWidth: 1360, mx: 'auto' }}>
+          <Outlet />
+        </Box>
       </Box>
 
       {/* Mobile bottom navigation */}
@@ -381,6 +449,15 @@ const Layout = () => {
           />
         </BottomNavigation>
       </Paper>
+      <CommandPalette
+        isOpen={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        isAdmin={isAdmin}
+        currentPath={location.pathname}
+        onNavigate={(path) => navigate(path)}
+        onLogout={handleLogout}
+        onToggleTheme={toggleMode}
+      />
     </Box>
   );
 };
