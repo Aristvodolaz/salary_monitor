@@ -30,7 +30,7 @@ import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import { TOKENS } from '../theme';
 import { useEffect, useState } from 'react';
-import { CommandPalette } from './CommandPalette';
+import CommandPalette from './CommandPalette';
 
 const SIDEBAR_WIDTH = 240;
 
@@ -454,7 +454,7 @@ const Layout = () => {
         onClose={() => setPaletteOpen(false)}
         isAdmin={isAdmin}
         currentPath={location.pathname}
-        onNavigate={(path) => navigate(path)}
+        onNavigate={(path: string) => navigate(path)}
         onLogout={handleLogout}
         onToggleTheme={toggleMode}
       />
