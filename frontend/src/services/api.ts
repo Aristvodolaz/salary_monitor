@@ -68,7 +68,14 @@ export const salaryAPI = {
 };
 
 export const operationsAPI = {
-  getOperations: (params: { startDate?: string; endDate?: string; limit?: number; offset?: number }) =>
+  getOperations: (params: {
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) =>
     api.get('/operations', { params }),
   getOperationsByType: (startDate?: string, endDate?: string) =>
     api.get('/operations/by-type', { params: { startDate, endDate } }),

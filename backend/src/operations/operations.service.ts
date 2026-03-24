@@ -18,7 +18,25 @@ export class OperationsService {
     endDate?: string,
     limit: number = 100,
     offset: number = 0,
+    sortBy: string = 'operation_date',
+    sortOrder: string = 'desc',
   ) {
+    const sortColumns: Record<string, string> = {
+      operation_id: 'operation_id',
+      operation_date: 'operation_date',
+      operation_type: 'operation_type',
+      participant_area: 'participant_area',
+      aei_count: 'aei_count',
+      rate: 'rate',
+      base_amount: 'base_amount',
+      warehouse_code: 'warehouse_code',
+      warehouse_name: 'warehouse_name',
+      employee_id: 'employee_id',
+      fio: 'fio',
+    };
+    const safeSortColumn = sortColumns[sortBy] || 'operation_date';
+    const safeSortDirection = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
     let query = `
       SELECT 
         operation_id,
@@ -50,7 +68,7 @@ export class OperationsService {
     }
 
     query += `
-      ORDER BY operation_date DESC
+      ORDER BY ${safeSortColumn} ${safeSortDirection}, operation_id DESC
       OFFSET @offset ROWS
       FETCH NEXT @limit ROWS ONLY
     `;

@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsDateString, IsOptional, IsInt, Min, Max, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetOperationsDto {
@@ -22,5 +22,25 @@ export class GetOperationsDto {
   @Min(0)
   @IsOptional()
   offset?: number = 0;
+
+  @IsOptional()
+  @IsIn([
+    'operation_id',
+    'operation_date',
+    'operation_type',
+    'participant_area',
+    'aei_count',
+    'rate',
+    'base_amount',
+    'warehouse_code',
+    'warehouse_name',
+    'employee_id',
+    'fio',
+  ])
+  sortBy?: string = 'operation_date';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc', 'ASC', 'DESC'])
+  sortOrder?: string = 'desc';
 }
 

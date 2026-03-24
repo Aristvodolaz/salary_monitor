@@ -13,6 +13,7 @@ import {
   TextField,
   Button,
   useMediaQuery,
+  TableSortLabel,
 } from '@mui/material';
 import { Search, FilterAltOff } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
@@ -233,13 +234,15 @@ const OperationsPage = () => {
   const [error, setError] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [sortBy, setSortBy] = useState('operation_date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   useEffect(() => {
     loadOperations();
-  }, [page, rowsPerPage]);
+  }, [page, rowsPerPage, sortBy, sortOrder]);
 
   const loadOperations = async () => {
     setLoading(true);
@@ -251,6 +254,8 @@ const OperationsPage = () => {
         endDate: endDate || undefined,
         limit: rowsPerPage,
         offset: page * rowsPerPage,
+        sortBy,
+        sortOrder,
       });
 
       setOperations(response.data.operations);
@@ -275,6 +280,15 @@ const OperationsPage = () => {
   };
 
   const hasFilter = startDate || endDate;
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortBy(column);
+    setSortOrder('asc');
+  };
 
   return (
     <Box>
@@ -393,12 +407,54 @@ const OperationsPage = () => {
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Дата</TableCell>
-                    <TableCell>Операция</TableCell>
-                    <TableCell align="right">АЕИ</TableCell>
-                    <TableCell align="right">Расценка</TableCell>
-                    <TableCell align="right" sx={{ color: 'var(--color-gold) !important' }}>
-                      Сумма
+                    <TableCell sortDirection={sortBy === 'operation_date' ? sortOrder : false}>
+                      <TableSortLabel
+                        active={sortBy === 'operation_date'}
+                        direction={sortBy === 'operation_date' ? sortOrder : 'asc'}
+                        onClick={() => handleSort('operation_date')}
+                      >
+                        Дата
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell sortDirection={sortBy === 'operation_type' ? sortOrder : false}>
+                      <TableSortLabel
+                        active={sortBy === 'operation_type'}
+                        direction={sortBy === 'operation_type' ? sortOrder : 'asc'}
+                        onClick={() => handleSort('operation_type')}
+                      >
+                        Операция
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell align="right" sortDirection={sortBy === 'aei_count' ? sortOrder : false}>
+                      <TableSortLabel
+                        active={sortBy === 'aei_count'}
+                        direction={sortBy === 'aei_count' ? sortOrder : 'asc'}
+                        onClick={() => handleSort('aei_count')}
+                      >
+                        АЕИ
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell align="right" sortDirection={sortBy === 'rate' ? sortOrder : false}>
+                      <TableSortLabel
+                        active={sortBy === 'rate'}
+                        direction={sortBy === 'rate' ? sortOrder : 'asc'}
+                        onClick={() => handleSort('rate')}
+                      >
+                        Расценка
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sortDirection={sortBy === 'base_amount' ? sortOrder : false}
+                      sx={{ color: 'var(--color-gold) !important' }}
+                    >
+                      <TableSortLabel
+                        active={sortBy === 'base_amount'}
+                        direction={sortBy === 'base_amount' ? sortOrder : 'asc'}
+                        onClick={() => handleSort('base_amount')}
+                      >
+                        Сумма
+                      </TableSortLabel>
                     </TableCell>
                   </TableRow>
                 </TableHead>

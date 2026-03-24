@@ -15,7 +15,7 @@ export class OperationsController {
    */
   @Get()
   async getOperations(@CurrentUser() user: any, @Query() query: GetOperationsDto) {
-    const { startDate, endDate, limit, offset } = query;
+    const { startDate, endDate, limit, offset, sortBy, sortOrder } = query;
 
     return this.operationsService.getUserOperations(
       user.id,
@@ -23,6 +23,8 @@ export class OperationsController {
       endDate,
       limit,
       offset,
+      sortBy,
+      sortOrder,
     );
   }
 

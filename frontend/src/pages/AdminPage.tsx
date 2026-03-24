@@ -18,6 +18,7 @@ import {
   Chip,
   Tooltip,
   Skeleton,
+  TableSortLabel,
 } from '@mui/material';
 import {
   Download,
@@ -412,6 +413,10 @@ const AdminPage = () => {
   // Pagination
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [sortBy, setSortBy] = useState<
+    'fio' | 'work_days' | 'total_operations' | 'total_aei' | 'total_amount'
+  >('total_amount');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Expandable rows
   const [expandedId, setExpandedId] = useState<string | number | null>(null);
@@ -484,10 +489,40 @@ const AdminPage = () => {
     );
   }, [salaryData, search]);
 
+  const sorted = useMemo(() => {
+    const data = [...filtered];
+    data.sort((a, b) => {
+      const left = a?.[sortBy];
+      const right = b?.[sortBy];
+
+      if (sortBy === 'fio') {
+        const result = String(left || '').localeCompare(String(right || ''), 'ru');
+        return sortOrder === 'asc' ? result : -result;
+      }
+
+      const leftNumber = Number(left || 0);
+      const rightNumber = Number(right || 0);
+      if (leftNumber === rightNumber) return 0;
+      return sortOrder === 'asc' ? leftNumber - rightNumber : rightNumber - leftNumber;
+    });
+    return data;
+  }, [filtered, sortBy, sortOrder]);
+
   const pageData = useMemo(
-    () => filtered.slice(page * rowsPerPage, (page + 1) * rowsPerPage),
-    [filtered, page, rowsPerPage],
+    () => sorted.slice(page * rowsPerPage, (page + 1) * rowsPerPage),
+    [sorted, page, rowsPerPage],
   );
+
+  const handleSort = (
+    column: 'fio' | 'work_days' | 'total_operations' | 'total_aei' | 'total_amount',
+  ) => {
+    if (sortBy === column) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortBy(column);
+    setSortOrder(column === 'fio' ? 'asc' : 'desc');
+  };
 
   // ── Expand/collapse row ──────────────────────────────────────────────────────
   const handleToggleExpand = (emp: any) => {
@@ -813,12 +848,54 @@ const AdminPage = () => {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ width: 40, p: '12px 8px' }} />
-                  <TableCell>Сотрудник</TableCell>
-                  <TableCell align="right">Раб. дней</TableCell>
-                  <TableCell align="right">Операций</TableCell>
-                  <TableCell align="right">АЕИ</TableCell>
-                  <TableCell align="right" sx={{ color: 'var(--color-gold) !important' }}>
-                    Сумма
+                  <TableCell sortDirection={sortBy === 'fio' ? sortOrder : false}>
+                    <TableSortLabel
+                      active={sortBy === 'fio'}
+                      direction={sortBy === 'fio' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('fio')}
+                    >
+                      Сотрудник
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell align="right" sortDirection={sortBy === 'work_days' ? sortOrder : false}>
+                    <TableSortLabel
+                      active={sortBy === 'work_days'}
+                      direction={sortBy === 'work_days' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('work_days')}
+                    >
+                      Раб. дней
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell align="right" sortDirection={sortBy === 'total_operations' ? sortOrder : false}>
+                    <TableSortLabel
+                      active={sortBy === 'total_operations'}
+                      direction={sortBy === 'total_operations' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('total_operations')}
+                    >
+                      Операций
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell align="right" sortDirection={sortBy === 'total_aei' ? sortOrder : false}>
+                    <TableSortLabel
+                      active={sortBy === 'total_aei'}
+                      direction={sortBy === 'total_aei' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('total_aei')}
+                    >
+                      АЕИ
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    sortDirection={sortBy === 'total_amount' ? sortOrder : false}
+                    sx={{ color: 'var(--color-gold) !important' }}
+                  >
+                    <TableSortLabel
+                      active={sortBy === 'total_amount'}
+                      direction={sortBy === 'total_amount' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('total_amount')}
+                    >
+                      Сумма
+                    </TableSortLabel>
                   </TableCell>
                 </TableRow>
               </TableHead>
