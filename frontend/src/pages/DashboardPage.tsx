@@ -148,7 +148,7 @@ const DashboardPage = () => {
         <Grid item xs={12}>
           <SalaryChart
             data={chartData}
-            title="Динамика заработка за последний месяц"
+            title="Динамика за последний месяц"
           />
         </Grid>
 

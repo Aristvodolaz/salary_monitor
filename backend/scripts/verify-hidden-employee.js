@@ -52,9 +52,9 @@ async function main() {
   }
 
   // 3. Проверяем запрос с фильтром (как в admin.service.ts)
-  console.log('=== Проверка запроса с фильтром (февраль 2026) ===\n');
+  console.log('=== Проверка запроса с фильтром (февраль 2026, склад 02DQ) ===\n');
   const filtered = await pool.request()
-    .input('warehouseId', sql.Int, 1)
+    .input('warehouseId', sql.Int, 2)
     .input('startDate', sql.Date, '2026-02-01')
     .input('endDate', sql.Date, '2026-02-28')
     .query(`

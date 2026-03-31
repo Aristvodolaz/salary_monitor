@@ -114,7 +114,7 @@ const OperationsDonutChart: React.FC<OperationsDonutChartProps> = ({
         <CardContent sx={{ p: { xs: 2, md: 3 } }}>
           <Box sx={{ mb: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
-              Расценки за операции
+              Всего за операции
             </Typography>
             <Typography variant="caption" sx={{ color: 'var(--color-text-secondary)' }}>
               Период: {period}
