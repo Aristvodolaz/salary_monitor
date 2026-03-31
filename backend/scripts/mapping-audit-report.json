@@ -1,0 +1,657 @@
+{
+  "timestamp": "2026-03-27T10:23:36.849Z",
+  "excelCount": 80,
+  "dbCount": 159,
+  "missing_in_db": [],
+  "extra_in_db": [
+    {
+      "code": "DEF_P",
+      "db_mapping": {
+        "operation_type": "ФС Коробочная комплектация",
+        "participant_area": "ФС",
+        "description": null
+      }
+    },
+    {
+      "code": "GRUZ",
+      "db_mapping": {
+        "operation_type": "ПМ Погрузка",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "HU01",
+      "db_mapping": {
+        "operation_type": "ПМ Работа с HU",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "HU2P",
+      "db_mapping": {
+        "operation_type": "ПМ Работа с HU",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "IN01",
+      "db_mapping": {
+        "operation_type": "ПМ Приёмка",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "IN02",
+      "db_mapping": {
+        "operation_type": "ПМ Приёмка",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "IN03",
+      "db_mapping": {
+        "operation_type": "ПМ Приёмка",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_CD",
+      "db_mapping": {
+        "operation_type": "Приемка товара",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_MC01",
+      "db_mapping": {
+        "operation_type": "Пополнение КС",
+        "participant_area": "КС",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_MZ01",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_MZ02",
+      "db_mapping": {
+        "operation_type": "Пополнение М2",
+        "participant_area": "М2",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_MZ03",
+      "db_mapping": {
+        "operation_type": "Пополнение М3",
+        "participant_area": "М3",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_MZ04",
+      "db_mapping": {
+        "operation_type": "Пополнение М4",
+        "participant_area": "М4",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_MZ05",
+      "db_mapping": {
+        "operation_type": "Пополнение М5",
+        "participant_area": "М5",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_SP01",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "INB_SPTK",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "INT_BSCD",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "INT_MC01",
+      "db_mapping": {
+        "operation_type": "Пополнение КС",
+        "participant_area": "КС",
+        "description": null
+      }
+    },
+    {
+      "code": "INT_MZ01",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "INT_MZ02",
+      "db_mapping": {
+        "operation_type": "Пополнение М2",
+        "participant_area": "М2",
+        "description": null
+      }
+    },
+    {
+      "code": "INT_MZ03",
+      "db_mapping": {
+        "operation_type": "Пополнение М3",
+        "participant_area": "М3",
+        "description": null
+      }
+    },
+    {
+      "code": "INT_MZ04",
+      "db_mapping": {
+        "operation_type": "Пополнение М4",
+        "participant_area": "М4",
+        "description": null
+      }
+    },
+    {
+      "code": "INT_MZ05",
+      "db_mapping": {
+        "operation_type": "Пополнение М5",
+        "participant_area": "М5",
+        "description": null
+      }
+    },
+    {
+      "code": "INT_PSST",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_BSCD",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_MC01",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_MZ01",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_MZ02",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_MZ03",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_MZ04",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_MZ05",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_PBST",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_PSST",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "INV_SPST",
+      "db_mapping": {
+        "operation_type": "Инвентаризация",
+        "participant_area": "",
+        "description": null
+      }
+    },
+    {
+      "code": "IV01",
+      "db_mapping": {
+        "operation_type": "ПМ Инвентаризация",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "IV02",
+      "db_mapping": {
+        "operation_type": "ПМ Инвентаризация",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "P2ST",
+      "db_mapping": {
+        "operation_type": "М2 Упаковка",
+        "participant_area": "М2",
+        "description": null
+      }
+    },
+    {
+      "code": "PAM2",
+      "db_mapping": {
+        "operation_type": "М2 Упаковка",
+        "participant_area": "М2",
+        "description": "М2: упаковка PAM2"
+      }
+    },
+    {
+      "code": "PAM4",
+      "db_mapping": {
+        "operation_type": "М4 Упаковка",
+        "participant_area": "М4",
+        "description": "М4: упаковка PAM4"
+      }
+    },
+    {
+      "code": "PAM5",
+      "db_mapping": {
+        "operation_type": "М5 Упаковка",
+        "participant_area": "М5",
+        "description": "М5: упаковка PAM5"
+      }
+    },
+    {
+      "code": "PAMC",
+      "db_mapping": {
+        "operation_type": "МС Упаковка",
+        "participant_area": "МС",
+        "description": "МС: упаковка PAMC"
+      }
+    },
+    {
+      "code": "PB4Z",
+      "db_mapping": {
+        "operation_type": "ФС Коробочная комплектация",
+        "participant_area": "ФС",
+        "description": "ФС: коробочная комплектация PB4Z"
+      }
+    },
+    {
+      "code": "PKST",
+      "db_mapping": {
+        "operation_type": "ФС Упаковка",
+        "participant_area": "ФС",
+        "description": null
+      }
+    },
+    {
+      "code": "PM2Z",
+      "db_mapping": {
+        "operation_type": "М2 Штучная комплектация",
+        "participant_area": "М2",
+        "description": "М2: штучная комплектация PM2Z"
+      }
+    },
+    {
+      "code": "PM33",
+      "db_mapping": {
+        "operation_type": "М3 Коробочная комплектация",
+        "participant_area": "М3",
+        "description": "М3: коробочная комплектация PM33"
+      }
+    },
+    {
+      "code": "PM3S",
+      "db_mapping": {
+        "operation_type": "М3 Коробочная комплектация",
+        "participant_area": "М3",
+        "description": "М3: коробочная комплектация PM3S"
+      }
+    },
+    {
+      "code": "PM3Z",
+      "db_mapping": {
+        "operation_type": "М3 Штучная комплектация",
+        "participant_area": "М3",
+        "description": "М3: штучная комплектация PM3Z"
+      }
+    },
+    {
+      "code": "PM4Z",
+      "db_mapping": {
+        "operation_type": "ФС Коробочная комплектация",
+        "participant_area": "ФС",
+        "description": "ФС: коробочная PM4Z"
+      }
+    },
+    {
+      "code": "PM53",
+      "db_mapping": {
+        "operation_type": "М5 Коробочная комплектация",
+        "participant_area": "М5",
+        "description": "М5: коробочная комплектация PM53"
+      }
+    },
+    {
+      "code": "PS01",
+      "db_mapping": {
+        "operation_type": "ФС Штучная комплектация",
+        "participant_area": "ФС",
+        "description": "ФС: штучная комплектация PS01"
+      }
+    },
+    {
+      "code": "PS4Z",
+      "db_mapping": {
+        "operation_type": "ФС Штучная комплектация",
+        "participant_area": "ФС",
+        "description": "Добавлено 2026-03-19: подтверждено эталонным расчётом февраль-2026"
+      }
+    },
+    {
+      "code": "PS5U",
+      "db_mapping": {
+        "operation_type": "М5 Штучная комплектация",
+        "participant_area": "М5",
+        "description": "М5: штучная комплектация PS5U"
+      }
+    },
+    {
+      "code": "PSC9",
+      "db_mapping": {
+        "operation_type": "МС Штучная комплектация",
+        "participant_area": "МС",
+        "description": "МС: штучная комплектация PSC9"
+      }
+    },
+    {
+      "code": "PU02",
+      "db_mapping": {
+        "operation_type": "ПМ Размещение",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "PU03",
+      "db_mapping": {
+        "operation_type": "ПМ Размещение",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_BRS1",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_BRS2",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_BRST",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_MC01",
+      "db_mapping": {
+        "operation_type": "Пополнение КС",
+        "participant_area": "КС",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_MZ01",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_MZ02",
+      "db_mapping": {
+        "operation_type": "Пополнение М2",
+        "participant_area": "М2",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_MZ03",
+      "db_mapping": {
+        "operation_type": "Пополнение М3",
+        "participant_area": "М3",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_MZ04",
+      "db_mapping": {
+        "operation_type": "Пополнение М4",
+        "participant_area": "М4",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_MZ05",
+      "db_mapping": {
+        "operation_type": "Пополнение М5",
+        "participant_area": "М5",
+        "description": null
+      }
+    },
+    {
+      "code": "REPL_PSS1",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "REPLO_BRST",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "REPLO_MC01",
+      "db_mapping": {
+        "operation_type": "Пополнение КС",
+        "participant_area": "КС",
+        "description": null
+      }
+    },
+    {
+      "code": "REPLO_MZ01",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "REPLO_MZ02",
+      "db_mapping": {
+        "operation_type": "Пополнение М2",
+        "participant_area": "М2",
+        "description": null
+      }
+    },
+    {
+      "code": "REPLO_MZ03",
+      "db_mapping": {
+        "operation_type": "Пополнение М3",
+        "participant_area": "М3",
+        "description": null
+      }
+    },
+    {
+      "code": "REPLO_MZ04",
+      "db_mapping": {
+        "operation_type": "Пополнение М4",
+        "participant_area": "М4",
+        "description": null
+      }
+    },
+    {
+      "code": "REPLO_MZ05",
+      "db_mapping": {
+        "operation_type": "Пополнение М5",
+        "participant_area": "М5",
+        "description": null
+      }
+    },
+    {
+      "code": "RPL_BRSTT",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "RPL1",
+      "db_mapping": {
+        "operation_type": "ПМ Пополнение",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "RPL2",
+      "db_mapping": {
+        "operation_type": "ПМ Пополнение",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "RPL3",
+      "db_mapping": {
+        "operation_type": "ПМ Пополнение",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "RPL5",
+      "db_mapping": {
+        "operation_type": "ПМ Пополнение",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "RPLO_BRSTT",
+      "db_mapping": {
+        "operation_type": "Пополнение М1",
+        "participant_area": "М1",
+        "description": null
+      }
+    },
+    {
+      "code": "UL01",
+      "db_mapping": {
+        "operation_type": "ПМ Погрузка",
+        "participant_area": "ПМ",
+        "description": null
+      }
+    },
+    {
+      "code": "UNLOAD",
+      "db_mapping": {
+        "operation_type": "Приемка товара",
+        "participant_area": "",
+        "description": null
+      }
+    }
+  ],
+  "mismatch_in_db": [],
+  "summary": {
+    "total_excel_rules": 80,
+    "total_db_mappings": 159,
+    "missing_in_db": 0,
+    "mismatch_in_db": 0,
+    "extra_in_db": 80,
+    "all_correct": false
+  }
+}

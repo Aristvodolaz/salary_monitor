@@ -88,8 +88,8 @@ export const adminAPI = {
     api.get('/admin/salary', { params: { startDate, endDate, warehouseId } }),
   exportSalary: (startDate: string, endDate: string, warehouseId?: number) =>
     api.get('/admin/export', { params: { startDate, endDate, warehouseId }, responseType: 'blob' }),
-  getStats: (warehouseId?: number) =>
-    api.get('/admin/stats', { params: { warehouseId } }),
+  getStats: (params?: { warehouseId?: number; startDate?: string; endDate?: string }) =>
+    api.get('/admin/stats', { params }),
   getEmployeeOperations: (
     employeeId: string | number,
     startDate: string,

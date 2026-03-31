@@ -141,9 +141,11 @@ export class AdminController {
   async getStats(
     @CurrentUser() user: any,
     @Query('warehouseId') warehouseId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     const parsedWarehouseId = warehouseId ? parseInt(warehouseId, 10) : undefined;
-    return this.adminService.getWarehouseStats(user, parsedWarehouseId);
+    return this.adminService.getWarehouseStats(user, parsedWarehouseId, startDate, endDate);
   }
 
   /**

@@ -34,6 +34,7 @@ interface ParsedOperation {
   operationDate: Date;
   sapOrderId: string | null;
   wcr: string;
+  aarea: string | null;  // зона активности из SAP WHOSet.Aarea
 }
 
 interface OperationRow {
@@ -46,6 +47,8 @@ interface OperationRow {
   operationDate: Date;
   amount: number;      // count * rate = Вn × Рm
   sapOrderId: string | null;
+  wcrCode: string | null;   // оригинальный WCR-код из SAP (RPL1/RPL2/PST1/...)
+  aarea: string | null;     // зона активности из SAP WHOSet.Aarea
 }
 
 interface DateChunk {
@@ -230,6 +233,8 @@ export class SapIntegrationService {
           operationDate: parsed.operationDate,
           amount: parsed.aeiCount * tariff.rate, // Вn × Рm
           sapOrderId: parsed.sapOrderId,
+          wcrCode: parsed.wcr || null,
+          aarea: parsed.aarea || null,
         };
       };
 
@@ -268,6 +273,8 @@ export class SapIntegrationService {
           operationDate:   parsed.operationDate,
           amount:          parsed.aeiCount * tariff.rate,
           sapOrderId:      parsed.sapOrderId,
+          wcrCode:         parsed.wcr || null,
+          aarea:           parsed.aarea || null,
         });
       }
 
@@ -461,6 +468,7 @@ export class SapIntegrationService {
       operationDate,
       sapOrderId: item.Who || null,
       wcr: (item.Wcr || '').trim(),
+      aarea: (item.Aarea || '').trim() || null,
     };
   }
 
@@ -497,8 +505,10 @@ export class SapIntegrationService {
         const operationDate = `'${row.operationDate.toISOString().slice(0, 19)}'`;
         const amount = row.amount != null ? row.amount : 'NULL';
         const sapOrderId = row.sapOrderId ? `N'${row.sapOrderId.replace(/'/g, "''")}'` : 'NULL';
-        
-        return `(${userId}, ${warehouseCode}, ${operationType}, ${participantArea}, ${count}, ${actdura}, ${operationDate}, ${amount}, ${sapOrderId})`;
+        const wcrCode = row.wcrCode ? `N'${row.wcrCode.replace(/'/g, "''")}'` : 'NULL';
+        const aarea = row.aarea ? `N'${row.aarea.replace(/'/g, "''")}'` : 'NULL';
+
+        return `(${userId}, ${warehouseCode}, ${operationType}, ${participantArea}, ${count}, ${actdura}, ${operationDate}, ${amount}, ${sapOrderId}, ${wcrCode}, ${aarea})`;
       }).join(',\n        ');
       
       await pool.request().query(`
@@ -506,7 +516,7 @@ export class SapIntegrationService {
         USING (
           SELECT * FROM (VALUES
             ${values}
-          ) AS source(user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id)
+          ) AS source(user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id, wcr_code, aarea)
         ) AS source
         ON (
           target.user_id = source.user_id
@@ -519,10 +529,12 @@ export class SapIntegrationService {
             target.amount = source.amount,
             target.actdura = source.actdura,
             target.participant_area = source.participant_area,
+            target.wcr_code = source.wcr_code,
+            target.aarea = source.aarea,
             target.updated_at = GETDATE()
         WHEN NOT MATCHED THEN
-          INSERT (user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id)
-          VALUES (source.user_id, source.warehouse_code, source.operation_type, source.participant_area, source.count, source.actdura, source.operation_date, source.amount, source.sap_order_id);
+          INSERT (user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id, wcr_code, aarea)
+          VALUES (source.user_id, source.warehouse_code, source.operation_type, source.participant_area, source.count, source.actdura, source.operation_date, source.amount, source.sap_order_id, source.wcr_code, source.aarea);
       `);
       
       inserted += chunk.length;

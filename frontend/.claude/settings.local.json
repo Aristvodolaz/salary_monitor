@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la ../backend/scripts/*.js)",
+      "Bash(npm list:*)",
+      "Bash(npm install:*)",
+      "Bash(node scripts/verify-excel-mappings.js)",
+      "Bash(node -e \":*)"
+    ]
+  }
+}

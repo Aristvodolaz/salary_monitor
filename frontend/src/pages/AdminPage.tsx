@@ -461,7 +461,7 @@ const AdminPage = () => {
     try {
       const [salaryRes, statsRes] = await Promise.all([
         adminAPI.getWarehouseSalary(startDate, endDate),
-        adminAPI.getStats(),
+        adminAPI.getStats({ startDate, endDate }),
       ]);
       setSalaryData(salaryRes.data);
       setStats(statsRes.data);

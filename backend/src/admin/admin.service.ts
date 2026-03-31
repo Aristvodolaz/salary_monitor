@@ -168,7 +168,7 @@ export class AdminService {
   /**
    * Статистика склада
    */
-  async getWarehouseStats(adminUser: any, warehouseId?: number) {
+  async getWarehouseStats(adminUser: any, warehouseId?: number, startDate?: string, endDate?: string) {
     const targetWarehouseId = warehouseId || adminUser.warehouseId;
 
     if (adminUser.role === 'admin' && targetWarehouseId !== adminUser.warehouseId) {
@@ -176,20 +176,24 @@ export class AdminService {
     }
 
     const query = `
-      SELECT 
-        COUNT(DISTINCT user_id) as active_employees,
-        COUNT(DISTINCT operation_type) as operation_types,
-        SUM(aei_count) as total_aei,
-        SUM(base_amount) as total_amount,
+      SELECT
+        COUNT(DISTINCT sd.user_id) as active_employees,
+        COUNT(DISTINCT sd.operation_type) as operation_types,
+        SUM(sd.aei_count) as total_aei,
+        SUM(sd.base_amount) as total_amount,
         COUNT(*) as total_operations
-      FROM v_salary_details
-      WHERE warehouse_code = (
-        SELECT code FROM warehouses WHERE id = @warehouseId
-      )
-      AND operation_date >= DATEADD(MONTH, -1, GETDATE())
+      FROM v_salary_details sd
+      INNER JOIN users u ON sd.user_id = u.id
+      WHERE u.warehouse_id = @warehouseId
+        AND (@startDate IS NULL OR sd.operation_date >= @startDate)
+        AND (@endDate IS NULL OR sd.operation_date <= @endDate)
     `;
 
-    return this.db.queryOne(query, { warehouseId: targetWarehouseId });
+    return this.db.queryOne(query, {
+      warehouseId: targetWarehouseId,
+      startDate: startDate || null,
+      endDate: endDate || null,
+    });
   }
 
   /**
