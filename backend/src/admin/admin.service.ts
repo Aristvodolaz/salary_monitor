@@ -57,6 +57,7 @@ export class AdminService {
       WHERE u.warehouse_id = @warehouseId
         AND sd.operation_date >= @startDate
         AND sd.operation_date <= @endDate
+        AND u.employee_id != '00000000'
       GROUP BY sd.user_id, u.employee_id, u.fio
       ORDER BY total_amount DESC
     `;
@@ -187,6 +188,7 @@ export class AdminService {
       WHERE u.warehouse_id = @warehouseId
         AND (@startDate IS NULL OR sd.operation_date >= @startDate)
         AND (@endDate IS NULL OR sd.operation_date <= @endDate)
+        AND u.employee_id != '00000000'
     `;
 
     return this.db.queryOne(query, {
@@ -340,6 +342,7 @@ export class AdminService {
       WHERE u.warehouse_id = @warehouseId
         AND sd.operation_date >= @startDate
         AND sd.operation_date <= @endDate
+        AND u.employee_id != '00000000'
     `;
     const empParams: any = { warehouseId: targetWarehouseId, startDate, endDate };
 
