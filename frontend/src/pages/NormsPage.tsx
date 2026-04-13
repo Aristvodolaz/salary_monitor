@@ -18,7 +18,7 @@ import {
   Tooltip,
   TableSortLabel,
 } from '@mui/material';
-import { Refresh, TableChart, BarChart, Download, LocalShipping } from '@mui/icons-material';
+import { Refresh, TableChart, BarChart, Download, LocalShipping, People, KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { normsAPI } from '../services/api';
@@ -1075,6 +1075,364 @@ const PickingStatsTab = () => {
   );
 };
 
+// ── NormsEmployeesTab ──────────────────────────────────────────────────────────
+
+interface NormsEmployee {
+  user_id: number;
+  employee_id: string;
+  fio: string;
+  work_days: number;
+  total_aei: number;
+  aei_amount: number;
+  total_prod: number;
+  picking_amount: number;
+  total_amount: number;
+}
+
+interface EmployeeDetail {
+  aei: {
+    wcr_code: string;
+    description: string;
+    norm_type: string;
+    total_aei: number;
+    total_amount: number;
+    operations_count: number;
+    first_date: string;
+    last_date: string;
+  }[];
+  picking: {
+    wcr_code: string;
+    description: string;
+    participant_area: string;
+    picking_type: string;
+    rate: number | null;
+    total_prod: number;
+    total_amount: number;
+    operations_count: number;
+    first_date: string;
+    last_date: string;
+  }[];
+}
+
+const fmt = (n: number) => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtInt = (n: number) => n.toLocaleString('ru-RU');
+
+const ExpandedEmployeeDetail = ({
+  userId,
+  startDate,
+  endDate,
+}: {
+  userId: number;
+  startDate: string;
+  endDate: string;
+}) => {
+  const [detail, setDetail] = useState<EmployeeDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    normsAPI.getEmployeeDetail(userId, startDate, endDate)
+      .then((r) => { if (!cancelled) setDetail(r.data); })
+      .catch(() => { if (!cancelled) setError('Ошибка загрузки детализации'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [userId, startDate, endDate]);
+
+  if (loading) return (
+    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {[1,2,3].map((i) => <Skeleton key={i} height={28} />)}
+    </Box>
+  );
+  if (error) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>;
+  if (!detail || (detail.aei.length === 0 && detail.picking.length === 0)) {
+    return <Box sx={{ p: 2, textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>Нет данных за период</Box>;
+  }
+
+  return (
+    <Box sx={{ px: 2.5, pb: 2, pt: 1 }}>
+      {/* АЕИ-операции */}
+      {detail.aei.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--color-text-secondary)', mb: 1 }}>
+            АЕИ-операции (блок 1)
+          </Typography>
+          {detail.aei.map((row) => (
+            <Box
+              key={row.wcr_code}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1.5,
+                px: 1.5, py: 0.75, mb: 0.5,
+                borderRadius: 1.5,
+                backgroundColor: 'var(--color-bg-elevated)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', minWidth: 90, color: 'var(--color-text-primary)' }}>
+                {row.wcr_code}
+              </Typography>
+              <Typography sx={{ fontSize: '0.8rem', flex: 1, color: 'var(--color-text-primary)' }}>
+                {row.description}
+              </Typography>
+              <Chip label={row.norm_type} size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
+              <Typography sx={{ fontFamily: 'monospace', fontSize: '0.8rem', minWidth: 70, textAlign: 'right' }}>
+                {fmtInt(row.total_aei)} АЕИ
+              </Typography>
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.8rem', minWidth: 90, textAlign: 'right', color: '#10B981' }}>
+                {fmt(row.total_amount)} ₽
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* Picking-операции */}
+      {detail.picking.length > 0 && (
+        <Box>
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--color-text-secondary)', mb: 1 }}>
+            Комплектация (блок 2, продуктовые задачи)
+          </Typography>
+          {detail.picking.map((row) => (
+            <Box
+              key={row.wcr_code}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1.5,
+                px: 1.5, py: 0.75, mb: 0.5,
+                borderRadius: 1.5,
+                backgroundColor: alpha('#3B82F6', 0.04),
+                border: `1px solid ${alpha('#3B82F6', 0.2)}`,
+              }}
+            >
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', minWidth: 90, color: 'var(--color-text-primary)' }}>
+                {row.wcr_code}
+              </Typography>
+              <Typography sx={{ fontSize: '0.8rem', flex: 1 }}>
+                {row.description}
+              </Typography>
+              <Chip
+                label={row.participant_area}
+                size="small"
+                sx={{ fontSize: '0.65rem', height: 18, fontWeight: 700,
+                  backgroundColor: alpha(PICKING_TYPE_COLORS[row.picking_type] ?? '#6B7194', 0.15),
+                  color: PICKING_TYPE_COLORS[row.picking_type] ?? 'var(--color-text-secondary)',
+                }}
+              />
+              <Typography sx={{ fontFamily: 'monospace', fontSize: '0.8rem', minWidth: 80, textAlign: 'right' }}>
+                {fmtInt(row.total_prod)} задач
+              </Typography>
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.8rem', minWidth: 90, textAlign: 'right', color: '#3B82F6' }}>
+                {fmt(row.total_amount)} ₽
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+const NormsEmployeesTab = () => {
+  const [employees, setEmployees] = useState<NormsEmployee[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [startDate, setStartDate] = useState(MARCH_START);
+  const [endDate, setEndDate]     = useState(MARCH_END);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [search, setSearch]       = useState('');
+  const [sortBy, setSortBy]       = useState<keyof NormsEmployee>('total_amount');
+  const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('desc');
+
+  const load = (s?: string, e?: string) => {
+    const from = s ?? startDate;
+    const to   = e ?? endDate;
+    setLoading(true);
+    setError(null);
+    setExpandedId(null);
+    normsAPI.getEmployees(from, to)
+      .then((r) => setEmployees(r.data))
+      .catch(() => setError('Ошибка загрузки данных сотрудников'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  const filtered = useMemo(() => {
+    if (!search) return employees;
+    const q = search.toLowerCase();
+    return employees.filter((e) =>
+      e.fio.toLowerCase().includes(q) || e.employee_id.includes(q),
+    );
+  }, [employees, search]);
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const av = a[sortBy] as number | string;
+      const bv = b[sortBy] as number | string;
+      if (typeof av === 'string') {
+        const r = av.localeCompare(bv as string, 'ru');
+        return sortDir === 'asc' ? r : -r;
+      }
+      return sortDir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+  }, [filtered, sortBy, sortDir]);
+
+  const handleSort = (col: keyof NormsEmployee) => {
+    if (sortBy === col) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
+    else { setSortBy(col); setSortDir(col === 'fio' ? 'asc' : 'desc'); }
+  };
+
+  const SortLabel = ({ col, children }: { col: keyof NormsEmployee; children: React.ReactNode }) => (
+    <Box
+      component="span"
+      onClick={() => handleSort(col)}
+      sx={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 0.5,
+        color: sortBy === col ? 'var(--color-text-primary)' : undefined,
+        '&:hover': { color: 'var(--color-text-primary)' },
+      }}
+    >
+      {children}
+      {sortBy === col && (
+        sortDir === 'asc' ? <KeyboardArrowUp sx={{ fontSize: 14 }} /> : <KeyboardArrowDown sx={{ fontSize: 14 }} />
+      )}
+    </Box>
+  );
+
+  // Summary totals
+  const totals = useMemo(() => ({
+    employees: filtered.length,
+    aei_amount:     filtered.reduce((s, e) => s + e.aei_amount, 0),
+    picking_amount: filtered.reduce((s, e) => s + e.picking_amount, 0),
+    total_amount:   filtered.reduce((s, e) => s + e.total_amount, 0),
+  }), [filtered]);
+
+  return (
+    <Box>
+      {/* Controls */}
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <TextField label="С" type="date" size="small" value={startDate}
+          onChange={(e) => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+        <TextField label="По" type="date" size="small" value={endDate}
+          onChange={(e) => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+        <Button variant="contained" size="small" startIcon={<Refresh />} onClick={() => load()} disabled={loading}>
+          Загрузить
+        </Button>
+        <Button size="small" variant="outlined" onClick={() => {
+          setStartDate(CAL_MARCH_2026.start); setEndDate(CAL_MARCH_2026.end);
+          load(CAL_MARCH_2026.start, CAL_MARCH_2026.end);
+        }}>Март 2026</Button>
+        <TextField
+          size="small" placeholder="Поиск по ФИО / ШК..."
+          value={search} onChange={(e) => setSearch(e.target.value)}
+          sx={{ ml: 'auto', width: 240 }}
+        />
+      </Box>
+
+      {/* Summary */}
+      {!loading && employees.length > 0 && (
+        <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+          <Chip label={`Сотрудников: ${totals.employees}`} size="small" />
+          <Chip label={`АЕИ: ${fmt(totals.aei_amount)} ₽`} size="small" color="success" variant="outlined" />
+          <Chip label={`Комплектация: ${fmt(totals.picking_amount)} ₽`} size="small" color="primary" variant="outlined" />
+          <Chip label={`Итого: ${fmt(totals.total_amount)} ₽`} size="small" color="warning" />
+        </Box>
+      )}
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      <TableContainer sx={{ border: '1px solid var(--color-border)', borderRadius: 2, overflow: 'hidden' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <HeaderCell sx={{ width: 40 }}>{''}</HeaderCell>
+              <HeaderCell><SortLabel col="fio">Сотрудник</SortLabel></HeaderCell>
+              <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="work_days">Дней</SortLabel></HeaderCell>
+              <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_aei">АЕИ</SortLabel></HeaderCell>
+              <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="aei_amount">Сумма АЕИ, ₽</SortLabel></HeaderCell>
+              <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_prod">Задач</SortLabel></HeaderCell>
+              <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="picking_amount">Сумма компл., ₽</SortLabel></HeaderCell>
+              <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_amount">Итого, ₽</SortLabel></HeaderCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <SkeletonRows cols={8} />
+            ) : sorted.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} sx={{ textAlign: 'center', py: 4, color: 'var(--color-text-secondary)' }}>
+                  {employees.length === 0 ? 'Нажмите «Загрузить» для получения данных' : 'Ничего не найдено'}
+                </TableCell>
+              </TableRow>
+            ) : (
+              sorted.map((emp) => (
+                <React.Fragment key={emp.user_id}>
+                  <TableRow
+                    onClick={() => setExpandedId(expandedId === emp.user_id ? null : emp.user_id)}
+                    sx={{
+                      cursor: 'pointer',
+                      backgroundColor: expandedId === emp.user_id ? alpha('#F59E0B', 0.06) : undefined,
+                      '&:hover': { backgroundColor: expandedId === emp.user_id ? alpha('#F59E0B', 0.09) : 'var(--color-bg-hover)' },
+                      transition: 'background-color 0.15s',
+                    }}
+                  >
+                    <TableCell sx={{ textAlign: 'center', py: 0.5 }}>
+                      {expandedId === emp.user_id
+                        ? <KeyboardArrowUp fontSize="small" sx={{ color: 'var(--color-text-secondary)' }} />
+                        : <KeyboardArrowDown fontSize="small" sx={{ color: 'var(--color-text-secondary)' }} />
+                      }
+                    </TableCell>
+                    <TableCell>
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                        {emp.fio}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                        ШК: {emp.employee_id}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>{emp.work_days}</TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                      {emp.total_aei > 0 ? fmtInt(emp.total_aei) : '—'}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: '#10B981', fontWeight: emp.aei_amount > 0 ? 700 : 400 }}>
+                      {emp.aei_amount > 0 ? fmt(emp.aei_amount) : '—'}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                      {emp.total_prod > 0 ? fmtInt(emp.total_prod) : '—'}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: '#3B82F6', fontWeight: emp.picking_amount > 0 ? 700 : 400 }}>
+                      {emp.picking_amount > 0 ? fmt(emp.picking_amount) : '—'}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                      {fmt(emp.total_amount)}
+                    </TableCell>
+                  </TableRow>
+                  {expandedId === emp.user_id && (
+                    <TableRow>
+                      <TableCell colSpan={8} sx={{ p: 0, backgroundColor: 'var(--color-bg-surface)' }}>
+                        <ExpandedEmployeeDetail
+                          userId={emp.user_id}
+                          startDate={startDate}
+                          endDate={endDate}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {!loading && sorted.length > 0 && (
+        <Typography variant="caption" sx={{ color: 'var(--color-text-secondary)', mt: 1, display: 'block' }}>
+          Показано: {sorted.length} из {employees.length} сотрудников
+        </Typography>
+      )}
+    </Box>
+  );
+};
+
 // ── NormsPage ──────────────────────────────────────────────────────────────────
 
 const NormsPage = () => {
@@ -1096,12 +1454,14 @@ const NormsPage = () => {
         <Tab icon={<BarChart fontSize="small" />} iconPosition="start" label="Статистика (АЕИ)" />
         <Tab icon={<LocalShipping fontSize="small" />} iconPosition="start" label="Справочник (комплектация)" />
         <Tab icon={<BarChart fontSize="small" />} iconPosition="start" label="Статистика (комплектация)" />
+        <Tab icon={<People fontSize="small" />} iconPosition="start" label="Сотрудники" />
       </Tabs>
 
       {tab === 0 && <NormsReferenceTab />}
       {tab === 1 && <StatsTab />}
       {tab === 2 && <PickingReferenceTab />}
       {tab === 3 && <PickingStatsTab />}
+      {tab === 4 && <NormsEmployeesTab />}
     </Box>
   );
 };
