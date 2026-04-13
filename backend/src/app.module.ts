@@ -8,6 +8,7 @@ import { SalaryModule } from './salary/salary.module';
 import { OperationsModule } from './operations/operations.module';
 import { AdminModule } from './admin/admin.module';
 import { SapIntegrationModule } from './sap-integration/sap-integration.module';
+import { NormsModule } from './norms/norms.module';
 import { LoggerModule } from './common/logger/logger.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { LoggerModule } from './common/logger/logger.module';
     OperationsModule,
     AdminModule,
     SapIntegrationModule,
+    NormsModule,
   ],
 })
 export class AppModule {}

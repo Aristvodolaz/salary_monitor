@@ -27,8 +27,10 @@ interface ParsedOperation {
   employeeName1: string;
   employeeName2: string;
   warehouseCode: string;
-  /** Фактическое АЕИ из ZsumAmountItm — ОСНОВНОЙ показатель Вn */
+  /** Фактическое АЕИ из ZsumAmountItm — блок 1 (приёмка, размещение, пополнение) */
   aeiCount: number;
+  /** Кол-во продуктовых задач из ZprodWtItm — блок 2 (комплектация) */
+  prodCount: number;
   /** Фактическое время (минуты) — только для логов/справки */
   actdura: number;
   operationDate: Date;
@@ -42,12 +44,13 @@ interface OperationRow {
   warehouseCode: string;
   operationType: string;
   participantArea: string;
-  count: number;       // АЕИ (ZsumAmountItm)
+  count: number;       // АЕИ (ZsumAmountItm) — блок 1
+  prodCount: number;   // продуктовые задачи (ZprodWtItm) — блок 2
   actdura: number;     // минуты
   operationDate: Date;
   amount: number;      // count * rate = Вn × Рm
   sapOrderId: string | null;
-  wcrCode: string | null;   // оригинальный WCR-код из SAP (RPL1/RPL2/PST1/...)
+  wcrCode: string | null;   // оригинальный WCR-код из SAP
   aarea: string | null;     // зона активности из SAP WHOSet.Aarea
 }
 
@@ -228,13 +231,14 @@ export class SapIntegrationService {
           warehouseCode,
           operationType:   wcrEntry.operation_type,
           participantArea: wcrEntry.participant_area,
-          count:  parsed.aeiCount,              // Вn = ZsumAmountItm
-          actdura: parsed.actdura,
+          count:     parsed.aeiCount,              // Вn = ZsumAmountItm (блок 1)
+          prodCount: parsed.prodCount,             // ZprodWtItm (блок 2)
+          actdura:   parsed.actdura,
           operationDate: parsed.operationDate,
-          amount: parsed.aeiCount * tariff.rate, // Вn × Рm
+          amount: parsed.aeiCount * tariff.rate,   // Вn × Рm
           sapOrderId: parsed.sapOrderId,
           wcrCode: parsed.wcr || null,
-          aarea: parsed.aarea || null,
+          aarea:   parsed.aarea || null,
         };
       };
 
@@ -269,6 +273,7 @@ export class SapIntegrationService {
           operationType:   wcrEntry.operation_type,
           participantArea: wcrEntry.participant_area,
           count:           parsed.aeiCount,
+          prodCount:       parsed.prodCount,
           actdura:         parsed.actdura,
           operationDate:   parsed.operationDate,
           amount:          parsed.aeiCount * tariff.rate,
@@ -441,15 +446,16 @@ export class SapIntegrationService {
 
   private parseItem(item: any): ParsedOperation | null {
     // ╔══════════════════════════════════════════════════════════════╗
-    // ║  Вn = ZsumAmountItm — ФАКТИЧЕСКОЕ АЕИ из WMS               ║
-    // ║  Это главный показатель по ТЗ. Используем напрямую.         ║
-    // ║  НЕ рассчитываем из Actdura — это было источником ошибки!   ║
+    // ║  Блок 1: Вn = ZsumAmountItm — АЕИ (приёмка, размещение)    ║
+    // ║  Блок 2: ZprodWtItm — продуктовые задачи (комплектация)     ║
+    // ║  Пропускаем запись только если ОБА равны 0.                  ║
     // ╚══════════════════════════════════════════════════════════════╝
-    const aeiCount = Math.round(parseFloat(item.ZsumAmountItm || '0'));
-    if (aeiCount <= 0) return null;
+    const aeiCount  = Math.round(parseFloat(item.ZsumAmountItm || '0'));
+    const prodCount = Math.round(parseFloat(item.ZprodWtItm   || '0'));
+    if (aeiCount <= 0 && prodCount <= 0) return null;
 
     const employeeId = (item.Employeeid || item.Processor || '').trim();
-    if (!employeeId) return null; // Пропускаем только пустые ID
+    if (!employeeId) return null;
 
     // Дата из формата /Date(timestamp)/
     let operationDate = new Date();
@@ -463,8 +469,9 @@ export class SapIntegrationService {
       employeeName1: (item.McName1 || '').trim(),
       employeeName2: (item.McName2 || '').trim(),
       warehouseCode: item.Lgnum,
-      aeiCount,                                   // Вn = ZsumAmountItm (истинное АЕИ)
-      actdura: parseFloat(item.Actdura || '0'),   // для справки/отчётов
+      aeiCount,                                   // Вn = ZsumAmountItm
+      prodCount,                                  // ZprodWtItm
+      actdura: parseFloat(item.Actdura || '0'),
       operationDate,
       sapOrderId: item.Who || null,
       wcr: (item.Wcr || '').trim(),
@@ -495,12 +502,13 @@ export class SapIntegrationService {
       const chunk = batch.slice(i, i + CHUNK_SIZE);
       
       // Строим VALUES для MERGE
-      const values = chunk.map((row, idx) => {
+      const values = chunk.map((row) => {
         const userId = row.userId;
         const warehouseCode = `N'${(row.warehouseCode || '').replace(/'/g, "''")}'`;
         const operationType = `N'${(row.operationType || '').replace(/'/g, "''")}'`;
         const participantArea = row.participantArea ? `N'${row.participantArea.replace(/'/g, "''")}'` : 'NULL';
         const count = row.count;
+        const prodCount = row.prodCount != null ? row.prodCount : 0;
         const actdura = row.actdura != null ? row.actdura : 'NULL';
         const operationDate = `'${row.operationDate.toISOString().slice(0, 19)}'`;
         const amount = row.amount != null ? row.amount : 'NULL';
@@ -508,15 +516,15 @@ export class SapIntegrationService {
         const wcrCode = row.wcrCode ? `N'${row.wcrCode.replace(/'/g, "''")}'` : 'NULL';
         const aarea = row.aarea ? `N'${row.aarea.replace(/'/g, "''")}'` : 'NULL';
 
-        return `(${userId}, ${warehouseCode}, ${operationType}, ${participantArea}, ${count}, ${actdura}, ${operationDate}, ${amount}, ${sapOrderId}, ${wcrCode}, ${aarea})`;
+        return `(${userId}, ${warehouseCode}, ${operationType}, ${participantArea}, ${count}, ${prodCount}, ${actdura}, ${operationDate}, ${amount}, ${sapOrderId}, ${wcrCode}, ${aarea})`;
       }).join(',\n        ');
-      
+
       await pool.request().query(`
         MERGE operations AS target
         USING (
           SELECT * FROM (VALUES
             ${values}
-          ) AS source(user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id, wcr_code, aarea)
+          ) AS source(user_id, warehouse_code, operation_type, participant_area, count, prod_count, actdura, operation_date, amount, sap_order_id, wcr_code, aarea)
         ) AS source
         ON (
           target.user_id = source.user_id
@@ -526,6 +534,7 @@ export class SapIntegrationService {
         WHEN MATCHED THEN
           UPDATE SET
             target.count = source.count,
+            target.prod_count = source.prod_count,
             target.amount = source.amount,
             target.actdura = source.actdura,
             target.participant_area = source.participant_area,
@@ -533,8 +542,8 @@ export class SapIntegrationService {
             target.aarea = source.aarea,
             target.updated_at = GETDATE()
         WHEN NOT MATCHED THEN
-          INSERT (user_id, warehouse_code, operation_type, participant_area, count, actdura, operation_date, amount, sap_order_id, wcr_code, aarea)
-          VALUES (source.user_id, source.warehouse_code, source.operation_type, source.participant_area, source.count, source.actdura, source.operation_date, source.amount, source.sap_order_id, source.wcr_code, source.aarea);
+          INSERT (user_id, warehouse_code, operation_type, participant_area, count, prod_count, actdura, operation_date, amount, sap_order_id, wcr_code, aarea)
+          VALUES (source.user_id, source.warehouse_code, source.operation_type, source.participant_area, source.count, source.prod_count, source.actdura, source.operation_date, source.amount, source.sap_order_id, source.wcr_code, source.aarea);
       `);
       
       inserted += chunk.length;

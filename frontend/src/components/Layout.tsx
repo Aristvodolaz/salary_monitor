@@ -20,6 +20,7 @@ import {
   Dashboard,
   ListAlt,
   AdminPanelSettings,
+  Rule,
   Logout,
   LightMode,
   DarkMode,
@@ -80,7 +81,10 @@ const Layout = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const menuItems = isAdmin
-    ? [{ text: 'Админ-панель', icon: <AdminPanelSettings />, path: '/admin' }]
+    ? [
+        { text: 'Админ-панель', icon: <AdminPanelSettings />, path: '/admin' },
+        { text: 'Нормативы WCR', icon: <Rule />, path: '/norms' },
+      ]
     : [
         { text: 'Дашборд', icon: <Dashboard />, path: '/' },
         { text: 'Операции', icon: <ListAlt />, path: '/operations' },
@@ -434,6 +438,14 @@ const Layout = () => {
               icon={<AdminPanelSettings />}
               value="/admin"
               aria-label="Перейти в админ-панель"
+            />
+          )}
+          {isAdmin && (
+            <BottomNavigationAction
+              label="Нормативы"
+              icon={<Rule />}
+              value="/norms"
+              aria-label="Перейти на нормативы WCR"
             />
           )}
           <BottomNavigationAction

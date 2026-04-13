@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import OperationsPage from './pages/OperationsPage';
 import AdminPage from './pages/AdminPage';
+import NormsPage from './pages/NormsPage';
 import Layout from './components/Layout';
 
 function App() {
@@ -46,9 +47,13 @@ function App() {
           path="/operations"
           element={user ? (isAdmin ? <Navigate to="/admin" replace /> : <OperationsPage />) : <Navigate to="/login" />}
         />
-        <Route 
-          path="/admin" 
-          element={user?.role === 'admin' ? <AdminPage /> : <Navigate to="/" />} 
+        <Route
+          path="/admin"
+          element={user?.role === 'admin' ? <AdminPage /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/norms"
+          element={user?.role === 'admin' ? <NormsPage /> : <Navigate to="/" />}
         />
         <Route path="*" element={<Navigate to={user ? (isAdmin ? '/admin' : '/') : '/login'} replace />} />
       </Route>

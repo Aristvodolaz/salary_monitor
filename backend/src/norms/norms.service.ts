@@ -1,0 +1,299 @@
+import { Injectable } from '@nestjs/common';
+import * as sql from 'mssql';
+import { DatabaseService } from '../database/database.service';
+import { LoggerService } from '../common/logger/logger.service';
+
+export interface WcrNorm {
+  id: number;
+  wcr_code: string;
+  description: string;
+  norm_type: string;
+  norm_value: number | null;
+  is_active: boolean;
+}
+
+// ── Справочник комплектации (блок 2 — использует prod_count) ──────────────────
+
+export interface WcrPickingNorm {
+  id: number;
+  wcr_code: string;
+  participant_area: string;
+  description_old: string;
+  description_new: string;
+  picking_type: string;
+  norm_label: string;
+  rate: number | null;
+}
+
+export interface PickingStat {
+  wcr_code: string;
+  participant_area: string;
+  description_new: string;
+  picking_type: string;
+  norm_label: string;
+  rate: number | null;
+  /** Кол-во продуктовых задач (prod_count) за период */
+  total_prod: number;
+  /** Кол-во операций с prod_count > 0 */
+  total_operations: number;
+  /** Расчётная сумма за период (total_prod × rate) */
+  calc_amount: number | null;
+}
+
+export interface MarchStat {
+  wcr_code: string;
+  description: string;
+  norm_type: string;
+  norm_value: number | null;
+  total_aei: number;
+  total_operations: number;
+  total_actdura_min: number;
+  /** Фактическая производительность АЕИ/час (из actdura) */
+  actual_aei_per_hour: number | null;
+  /** Выполнение норматива, % (null если норматив не задан) */
+  norm_pct: number | null;
+}
+
+@Injectable()
+export class NormsService {
+  constructor(
+    private db: DatabaseService,
+    private logger: LoggerService,
+  ) {}
+
+  /** Справочник нормативов */
+  async getAllNorms(): Promise<WcrNorm[]> {
+    return this.db.query<WcrNorm>(`
+      SELECT id, wcr_code, description, norm_type, norm_value, is_active
+      FROM wcr_norms
+      WHERE is_active = 1
+      ORDER BY norm_type, wcr_code
+    `);
+  }
+
+  /**
+   * Статистика по операциям за указанный период,
+   * сгруппированная по WCR-коду и обогащённая нормативами из wcr_norms.
+   */
+  async getMarchStats(
+    startDate: string,
+    endDate: string,
+    warehouseCode?: string,
+  ): Promise<MarchStat[]> {
+    const warehouseFilter = warehouseCode
+      ? `AND o.warehouse_code = @warehouseCode`
+      : '';
+
+    const rows = await this.db.query<{
+      wcr_code: string;
+      description: string;
+      norm_type: string;
+      norm_value: number | null;
+      total_aei: number;
+      total_operations: number;
+      total_actdura_min: number;
+    }>(
+      `
+      SELECT
+        n.wcr_code,
+        n.description,
+        n.norm_type,
+        n.norm_value,
+        ISNULL(SUM(o.count), 0)        AS total_aei,
+        ISNULL(COUNT(o.id), 0)         AS total_operations,
+        ISNULL(SUM(o.actdura), 0)      AS total_actdura_min
+      FROM wcr_norms n
+      LEFT JOIN operations o
+        ON o.wcr_code = n.wcr_code
+        AND o.operation_date >= @startDate
+        AND o.operation_date <  DATEADD(DAY, 1, CAST(@endDate AS DATE))
+        ${warehouseFilter}
+      WHERE n.is_active = 1
+      GROUP BY n.wcr_code, n.description, n.norm_type, n.norm_value
+      ORDER BY n.norm_type, n.wcr_code
+      `,
+      {
+        startDate,
+        endDate,
+        ...(warehouseCode ? { warehouseCode } : {}),
+      },
+    );
+
+    return rows.map((r) => {
+      const hours = r.total_actdura_min > 0 ? r.total_actdura_min / 60 : null;
+      const actual_aei_per_hour =
+        hours !== null && r.total_aei > 0
+          ? Math.round((r.total_aei / hours) * 10) / 10
+          : null;
+      const norm_pct =
+        actual_aei_per_hour !== null && r.norm_value !== null && r.norm_value > 0
+          ? Math.round((actual_aei_per_hour / r.norm_value) * 1000) / 10
+          : null;
+
+      return {
+        wcr_code: r.wcr_code,
+        description: r.description,
+        norm_type: r.norm_type,
+        norm_value: r.norm_value,
+        total_aei: r.total_aei,
+        total_operations: r.total_operations,
+        total_actdura_min: r.total_actdura_min,
+        actual_aei_per_hour,
+        norm_pct,
+      };
+    });
+  }
+
+  // ── Комплектация (блок 2: prod_count) ────────────────────────────────────────
+
+  /** Справочник нормативов комплектации */
+  async getAllPickingNorms(): Promise<WcrPickingNorm[]> {
+    return this.db.query<WcrPickingNorm>(`
+      SELECT id, wcr_code, participant_area, description_old, description_new,
+             picking_type, norm_label, rate
+      FROM wcr_picking_norms
+      WHERE is_active = 1
+      ORDER BY participant_area, picking_type, wcr_code
+    `);
+  }
+
+  /**
+   * Статистика комплектации за период, используя prod_count (ZprodWtItm).
+   * Левое JOIN: все коды из wcr_picking_norms, даже если операций не было.
+   */
+  async getPickingStats(
+    startDate: string,
+    endDate: string,
+    warehouseCode?: string,
+  ): Promise<PickingStat[]> {
+    const warehouseFilter = warehouseCode
+      ? `AND o.warehouse_code = @warehouseCode`
+      : '';
+
+    const rows = await this.db.query<{
+      wcr_code: string;
+      participant_area: string;
+      description_new: string;
+      picking_type: string;
+      norm_label: string;
+      rate: number | null;
+      total_prod: number;
+      total_operations: number;
+    }>(
+      `
+      SELECT
+        n.wcr_code,
+        n.participant_area,
+        n.description_new,
+        n.picking_type,
+        n.norm_label,
+        n.rate,
+        ISNULL(SUM(o.prod_count), 0) AS total_prod,
+        ISNULL(COUNT(CASE WHEN o.prod_count > 0 THEN 1 END), 0) AS total_operations
+      FROM wcr_picking_norms n
+      LEFT JOIN operations o
+        ON o.wcr_code = n.wcr_code
+        AND o.operation_date >= @startDate
+        AND o.operation_date <  DATEADD(DAY, 1, CAST(@endDate AS DATE))
+        ${warehouseFilter}
+      WHERE n.is_active = 1
+      GROUP BY n.wcr_code, n.participant_area, n.description_new,
+               n.picking_type, n.norm_label, n.rate
+      ORDER BY n.participant_area, n.picking_type, n.wcr_code
+      `,
+      {
+        startDate,
+        endDate,
+        ...(warehouseCode ? { warehouseCode } : {}),
+      },
+    );
+
+    return rows.map((r) => ({
+      ...r,
+      calc_amount:
+        r.total_prod > 0 && r.rate !== null
+          ? Math.round(r.total_prod * r.rate * 100) / 100
+          : null,
+    }));
+  }
+
+  /**
+   * Сохранить снимок статистики нормативов за период в таблицу norms_stats_snapshot.
+   * Идемпотентно: сначала удаляются строки с тем же периодом и warehouse_code, затем вставляются заново.
+   */
+  async saveStatsSnapshot(
+    startDate: string,
+    endDate: string,
+    warehouseCode?: string,
+  ): Promise<{ deleted: number; inserted: number; period_start: string; period_end: string; warehouse_code: string | null }> {
+    const rows = await this.getMarchStats(startDate, endDate, warehouseCode);
+    const pool = this.db.getPool();
+    const transaction = new sql.Transaction(pool);
+
+    await transaction.begin();
+    try {
+      const delReq = new sql.Request(transaction);
+      delReq.input('period_start', sql.Date, new Date(`${startDate}T12:00:00`));
+      delReq.input('period_end', sql.Date, new Date(`${endDate}T12:00:00`));
+      delReq.input('warehouse_code', sql.NVarChar(20), warehouseCode ?? null);
+
+      const delResult = await delReq.query(`
+        DELETE FROM norms_stats_snapshot
+        WHERE period_start = @period_start
+          AND period_end = @period_end
+          AND (
+            (@warehouse_code IS NULL AND warehouse_code IS NULL)
+            OR warehouse_code = @warehouse_code
+          )
+      `);
+
+      const deleted = delResult.rowsAffected[0] ?? 0;
+
+      for (const row of rows) {
+        const ins = new sql.Request(transaction);
+        ins.input('period_start', sql.Date, new Date(`${startDate}T12:00:00`));
+        ins.input('period_end', sql.Date, new Date(`${endDate}T12:00:00`));
+        ins.input('warehouse_code', sql.NVarChar(20), warehouseCode ?? null);
+        ins.input('wcr_code', sql.NVarChar(50), row.wcr_code);
+        ins.input('description', sql.NVarChar(255), row.description);
+        ins.input('norm_type', sql.NVarChar(100), row.norm_type);
+        ins.input('norm_value', sql.Float, row.norm_value);
+        ins.input('total_aei', sql.Int, row.total_aei);
+        ins.input('total_operations', sql.Int, row.total_operations);
+        ins.input('total_actdura_min', sql.Int, row.total_actdura_min);
+        ins.input('actual_aei_per_hour', sql.Float, row.actual_aei_per_hour);
+        ins.input('norm_pct', sql.Float, row.norm_pct);
+
+        await ins.query(`
+          INSERT INTO norms_stats_snapshot (
+            period_start, period_end, warehouse_code,
+            wcr_code, description, norm_type, norm_value,
+            total_aei, total_operations, total_actdura_min,
+            actual_aei_per_hour, norm_pct
+          ) VALUES (
+            @period_start, @period_end, @warehouse_code,
+            @wcr_code, @description, @norm_type, @norm_value,
+            @total_aei, @total_operations, @total_actdura_min,
+            @actual_aei_per_hour, @norm_pct
+          )
+        `);
+      }
+
+      await transaction.commit();
+      this.logger.log(
+        `norms_stats_snapshot: period ${startDate}–${endDate}, wh=${warehouseCode ?? 'ALL'}, rows=${rows.length}`,
+      );
+
+      return {
+        deleted,
+        inserted: rows.length,
+        period_start: startDate,
+        period_end: endDate,
+        warehouse_code: warehouseCode ?? null,
+      };
+    } catch (e) {
+      await transaction.rollback();
+      throw e;
+    }
+  }
+}

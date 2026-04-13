@@ -133,6 +133,19 @@ export const adminAPI = {
     }),
 };
 
+export const normsAPI = {
+  // ── Блок 1: АЕИ-нормативы (приёмка, размещение, пополнение) ─────────────────
+  getNorms: () => api.get('/norms'),
+  getStats: (startDate: string, endDate: string, warehouseCode?: string) =>
+    api.get('/norms/stats', { params: { startDate, endDate, warehouseCode } }),
+  saveStatsSnapshot: (body: { startDate: string; endDate: string; warehouseCode?: string }) =>
+    api.post('/norms/stats/snapshot', body),
+  // ── Блок 2: Продуктовые задачи (комплектация) ────────────────────────────────
+  getPickingNorms: () => api.get('/norms/picking'),
+  getPickingStats: (startDate: string, endDate: string, warehouseCode?: string) =>
+    api.get('/norms/picking/stats', { params: { startDate, endDate, warehouseCode } }),
+};
+
 export const usersAPI = {
   getMe: () => api.get('/users/me'),
 };
