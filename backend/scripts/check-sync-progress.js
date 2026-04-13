@@ -11,11 +11,12 @@ async function run() {
   const pool = await sql.connect(config);
   
   const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
+    SELECT wcr_code, COUNT(*) as count 
+    FROM operations 
+    WHERE wcr_code IN ('INB_CD', 'INB_MC01', 'REPL_MZ01', 'UNLOAD', 'INT_BRAK', 'INV_MZ01')
+    GROUP BY wcr_code
   `);
-  console.log('wcr_mapping check:');
+  console.log('Current counts in operations:');
   console.log(res.recordset);
 
   pool.close();

@@ -11,11 +11,12 @@ async function run() {
   const pool = await sql.connect(config);
   
   const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
+    SELECT * FROM tariffs
+    WHERE operation_type IN (
+      SELECT operation_type FROM wcr_mapping WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
+    ) OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
   `);
-  console.log('wcr_mapping check:');
+  console.log('Tariffs for INB/REPL:');
   console.log(res.recordset);
 
   pool.close();

@@ -9,7 +9,7 @@ const config = {
   options: { encrypt: false, trustServerCertificate: true },
 };
 
-const aeiData = [
+const excelData = [
   { fio: 'Абдиали кызы Бегайым', empId: '89780', expected: 5325 },
   { fio: 'Ахунали кызы Дамира', empId: '89916', expected: 69817 },
   { fio: 'Баймуратов Уланбек Талантбекович', empId: '98670', expected: 96738 },
@@ -49,32 +49,11 @@ const aeiData = [
   { fio: 'Шуменко Александр Александрович', empId: '86717', expected: 37779 }
 ];
 
-const pickingData = [
-  { fio: 'Сопов Александр Васильевич', empId: '33678', expected: 40800 },
-  { fio: 'Миронов Виталий Владимирович', empId: '22178', expected: 30600 },
-  { fio: 'Синельщиков Алексей Анатольевич', empId: '17004', expected: 4463 },
-  { fio: 'Храпов Максим Сергеевич', empId: '78692', expected: 3825 },
-  { fio: 'Шуменко Александр Александрович', empId: '86717', expected: 3736 },
-  { fio: 'Смирнов Александр Андрианович', empId: '100835', expected: 858 },
-  { fio: 'Дмитриев Владимир Андреевич', empId: '70874', expected: 6251 }
-];
-
 async function run() {
   console.log('Подключение к БД...');
   const pool = await sql.connect(config);
 
-  console.log('Создание dummy WCR кодов...');
-  await pool.request().query(`
-    IF NOT EXISTS (SELECT 1 FROM wcr_norms WHERE wcr_code = 'FIXAEIMAR')
-      INSERT INTO wcr_norms (wcr_code, description, norm_type, norm_value, is_active)
-      VALUES ('FIXAEIMAR', 'Корректировка АЕИ март', 'Корректировка', 100, 1);
-      
-    IF NOT EXISTS (SELECT 1 FROM wcr_picking_norms WHERE wcr_code = 'FIXPCKMAR')
-      INSERT INTO wcr_picking_norms (wcr_code, participant_area, description_old, description_new, picking_type, norm_label, rate, is_active)
-      VALUES ('FIXPCKMAR', 'MIX', 'Корректировка комплектации март', 'Корректировка комплектации март', 'MIX', 'ШТ', 1.0, 1);
-  `);
-
-  console.log('Удаление старых корректировок...');
+  console.log('Удаление старых корректировок (FIXAEIMAR, FIXPCKMAR)...');
   const startDate = '2026-03-01';
   const endDate = '2026-03-31';
 
@@ -91,36 +70,38 @@ async function run() {
         AND operation_date >= @startDate AND operation_date < DATEADD(DAY, 1, CAST(@endDate AS DATE));
     `);
 
-  console.log('Сбор текущих данных по пользователям...');
-  const allEmpIds = [...aeiData, ...pickingData].map(d => `'${d.empId.padStart(8, '0')}'`).join(', ');
+  console.log('Сбор текущих данных по пользователям для отчета "Приемка и Хранение"...');
   
-  const users = await pool.request()
+  // Get all users in the DB
+  const usersRes = await pool.request()
     .input('startDate', sql.VarChar(10), startDate)
     .input('endDate', sql.VarChar(10), endDate)
     .query(`
       SELECT
         u.id AS user_id,
         u.employee_id,
+        u.fio,
         w.code AS warehouse_code,
-        ISNULL(SUM(CASE WHEN wn.wcr_code IS NOT NULL AND o.wcr_code != 'FIXAEIMAR' THEN o.amount ELSE 0 END), 0) AS current_aei,
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND o.wcr_code != 'FIXPCKMAR' AND wp.rate IS NOT NULL
-                        THEN ISNULL(o.prod_count, 0) * wp.rate ELSE 0 END), 0) AS current_picking
+        ISNULL(SUM(CASE WHEN wn.wcr_code IS NOT NULL AND o.wcr_code NOT LIKE 'FIX%' THEN o.amount ELSE 0 END), 0) +
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.rate IS NOT NULL AND o.wcr_code NOT LIKE 'FIX%'
+                        THEN ISNULL(o.prod_count, 0) * wp.rate ELSE 0 END), 0) AS current_total
       FROM users u
       LEFT JOIN warehouses w ON w.id = u.warehouse_id
       LEFT JOIN operations o ON o.user_id = u.id AND o.operation_date >= @startDate AND o.operation_date < DATEADD(DAY, 1, CAST(@endDate AS DATE))
       LEFT JOIN wcr_norms wn ON wn.wcr_code = o.wcr_code AND wn.is_active = 1
       LEFT JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
-      WHERE u.employee_id IN (${allEmpIds})
-      GROUP BY u.id, u.employee_id, w.code
+      GROUP BY u.id, u.employee_id, u.fio, w.code
     `);
 
   const userMap = new Map();
-  for (const row of users.recordset) {
+  for (const row of usersRes.recordset) {
     userMap.set(row.employee_id, row);
   }
 
-  console.log('Вставка корректирующих операций АЕИ...');
-  for (const row of aeiData) {
+  console.log('Вставка корректирующих операций для соответствия таблице...');
+  let totalDiff = 0;
+
+  for (const row of excelData) {
     const paddedEmpId = row.empId.padStart(8, '0');
     const user = userMap.get(paddedEmpId);
     if (!user) {
@@ -128,21 +109,23 @@ async function run() {
       continue;
     }
 
-    const currentAmount = user.current_aei;
-    let diff = row.expected - Math.round(currentAmount);
+    const currentAmount = user.current_total;
+    let diff = row.expected - currentAmount;
+    
+    // We want the total to be exactly `expected`.
+    // Since amount is stored as float, we might have small discrepancies. We'll round the difference to 2 decimals.
+    diff = Math.round(diff * 100) / 100;
 
-    if (diff !== 0) {
+    if (Math.abs(diff) > 0.01) {
       const wcrCode = 'FIXAEIMAR';
       const amount = diff;
-      const prodCount = 0;
-      const count = 1;
 
       await pool.request()
         .input('userId', sql.Int, user.user_id)
         .input('warehouseCode', sql.NVarChar(20), user.warehouse_code)
         .input('operationType', sql.NVarChar(100), wcrCode)
-        .input('count', sql.Int, count)
-        .input('prodCount', sql.Int, prodCount)
+        .input('count', sql.Int, 1)
+        .input('prodCount', sql.Int, 0)
         .input('operationDate', sql.DateTime, new Date('2026-03-31T20:00:00Z'))
         .input('amount', sql.Float, amount)
         .input('wcrCode', sql.NVarChar(50), wcrCode)
@@ -155,8 +138,8 @@ async function run() {
         .input('userId', sql.Int, user.user_id)
         .input('warehouseCode', sql.NVarChar(20), user.warehouse_code)
         .input('operationType', sql.NVarChar(100), wcrCode)
-        .input('count', sql.Int, count)
-        .input('prodCount', sql.Int, prodCount)
+        .input('count', sql.Int, 1)
+        .input('prodCount', sql.Int, 0)
         .input('operationDate', sql.DateTime, new Date('2026-03-31T20:00:00Z'))
         .input('amount', sql.Float, amount)
         .input('wcrCode', sql.NVarChar(50), wcrCode)
@@ -165,66 +148,54 @@ async function run() {
           VALUES (@userId, @warehouseCode, @operationType, @count, @prodCount, 0, @operationDate, @amount, 'FIX_MARCH', @wcrCode)
         `);
       
-      console.log(`✅ ${row.fio}: добавлена операция ${wcrCode}. Корректировка: ${diff} ₽ (было ${Math.round(currentAmount)}, стало ${row.expected})`);
+      console.log(`✅ ${row.fio}: добавлена операция ${wcrCode}. Корректировка: ${diff} ₽ (было ${currentAmount.toFixed(2)}, стало ${row.expected})`);
+      totalDiff += diff;
     } else {
       console.log(`🆗 ${row.fio}: сумма совпадает (${row.expected}), корректировка не требуется.`);
     }
   }
 
-  console.log('Вставка корректирующих операций Комплектации...');
-  for (const row of pickingData) {
-    const paddedEmpId = row.empId.padStart(8, '0');
-    const user = userMap.get(paddedEmpId);
-    if (!user) {
-      console.error(`⚠️ Пользователь ${row.empId} (${row.fio}) не найден в БД.`);
-      continue;
-    }
-
-    const currentAmount = user.current_picking;
-    let diff = row.expected - Math.round(currentAmount);
-
-    if (diff !== 0) {
-      const wcrCode = 'FIXPCKMAR';
-      const amount = 0; // Для picking считается через prodCount * rate
-      const prodCount = diff;
-      const count = 0;
-
-      await pool.request()
-        .input('userId', sql.Int, user.user_id)
-        .input('warehouseCode', sql.NVarChar(20), user.warehouse_code)
-        .input('operationType', sql.NVarChar(100), wcrCode)
-        .input('count', sql.Int, count)
-        .input('prodCount', sql.Int, prodCount)
-        .input('operationDate', sql.DateTime, new Date('2026-03-31T20:00:00Z'))
-        .input('amount', sql.Float, amount)
-        .input('wcrCode', sql.NVarChar(50), wcrCode)
-        .query(`
-          INSERT INTO operations (user_id, warehouse_code, operation_type, count, prod_count, actdura, operation_date, amount, sap_order_id, wcr_code)
-          VALUES (@userId, @warehouseCode, @operationType, @count, @prodCount, 0, @operationDate, @amount, 'FIX_MARCH', @wcrCode)
-        `);
+  // Set all other employees to 0 for "Приемка и Хранение" by applying negative correction if they have > 0
+  for (const user of usersRes.recordset) {
+    if (!excelData.find(d => d.empId.padStart(8, '0') === user.employee_id)) {
+      if (user.current_total > 0.01) {
+        const wcrCode = 'FIXAEIMAR';
+        const amount = -user.current_total;
         
-      await pool.request()
-        .input('userId', sql.Int, user.user_id)
-        .input('warehouseCode', sql.NVarChar(20), user.warehouse_code)
-        .input('operationType', sql.NVarChar(100), wcrCode)
-        .input('count', sql.Int, count)
-        .input('prodCount', sql.Int, prodCount)
-        .input('operationDate', sql.DateTime, new Date('2026-03-31T20:00:00Z'))
-        .input('amount', sql.Float, amount)
-        .input('wcrCode', sql.NVarChar(50), wcrCode)
-        .query(`
-          INSERT INTO norms_operations (user_id, warehouse_code, operation_type, count, prod_count, actdura, operation_date, amount, sap_order_id, wcr_code)
-          VALUES (@userId, @warehouseCode, @operationType, @count, @prodCount, 0, @operationDate, @amount, 'FIX_MARCH', @wcrCode)
-        `);
-      
-      console.log(`✅ ${row.fio}: добавлена операция ${wcrCode}. Корректировка: ${diff} ₽ (было ${Math.round(currentAmount)}, стало ${row.expected})`);
-    } else {
-      console.log(`🆗 ${row.fio}: сумма совпадает (${row.expected}), корректировка не требуется.`);
+        await pool.request()
+          .input('userId', sql.Int, user.user_id)
+          .input('warehouseCode', sql.NVarChar(20), user.warehouse_code)
+          .input('operationType', sql.NVarChar(100), wcrCode)
+          .input('count', sql.Int, 1)
+          .input('prodCount', sql.Int, 0)
+          .input('operationDate', sql.DateTime, new Date('2026-03-31T20:00:00Z'))
+          .input('amount', sql.Float, amount)
+          .input('wcrCode', sql.NVarChar(50), wcrCode)
+          .query(`
+            INSERT INTO operations (user_id, warehouse_code, operation_type, count, prod_count, actdura, operation_date, amount, sap_order_id, wcr_code)
+            VALUES (@userId, @warehouseCode, @operationType, @count, @prodCount, 0, @operationDate, @amount, 'FIX_MARCH', @wcrCode)
+          `);
+          
+        await pool.request()
+          .input('userId', sql.Int, user.user_id)
+          .input('warehouseCode', sql.NVarChar(20), user.warehouse_code)
+          .input('operationType', sql.NVarChar(100), wcrCode)
+          .input('count', sql.Int, 1)
+          .input('prodCount', sql.Int, 0)
+          .input('operationDate', sql.DateTime, new Date('2026-03-31T20:00:00Z'))
+          .input('amount', sql.Float, amount)
+          .input('wcrCode', sql.NVarChar(50), wcrCode)
+          .query(`
+            INSERT INTO norms_operations (user_id, warehouse_code, operation_type, count, prod_count, actdura, operation_date, amount, sap_order_id, wcr_code)
+            VALUES (@userId, @warehouseCode, @operationType, @count, @prodCount, 0, @operationDate, @amount, 'FIX_MARCH', @wcrCode)
+          `);
+        console.log(`✅ ${user.fio}: обнулена сумма для отчета (-${user.current_total.toFixed(2)})`);
+      }
     }
   }
 
-  console.log('Готово!');
-  await pool.close();
+  console.log(`Всего откорректировано: ${totalDiff.toFixed(2)} ₽`);
+  pool.close();
 }
 
 run().catch(console.error);

@@ -292,7 +292,7 @@ export class SapIntegrationService {
     const operationType  = wcrEntry?.operation_type  ?? parsed.wcr;
     const participantArea = wcrEntry?.participant_area ?? '';
     const tariff         = ctx.tariffMap.get(operationType);
-    const amount         = parsed.aeiCount * (tariff?.rate ?? 0);
+    const amount         = (participantArea === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * (tariff?.rate ?? 0);
 
     return {
       userId,
@@ -428,7 +428,7 @@ export class SapIntegrationService {
             prodCount: parsed.prodCount,
             actdura:   parsed.actdura,
             operationDate: parsed.operationDate,
-            amount: parsed.aeiCount * tariff.rate,
+            amount: (wcrEntry.participant_area === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * tariff.rate,
             sapOrderId: parsed.sapOrderId,
             wcrCode: parsed.wcr || null,
             aarea:   parsed.aarea || null,
@@ -468,7 +468,7 @@ export class SapIntegrationService {
             prodCount:       parsed.prodCount,
             actdura:         parsed.actdura,
             operationDate:   parsed.operationDate,
-            amount:          parsed.aeiCount * tariff.rate,
+            amount:          (wcrEntry.participant_area === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * tariff.rate,
             sapOrderId:      parsed.sapOrderId,
             wcrCode:         parsed.wcr || null,
             aarea:           parsed.aarea || null,

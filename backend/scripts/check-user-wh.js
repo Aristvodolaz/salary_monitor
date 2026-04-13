@@ -11,11 +11,12 @@ async function run() {
   const pool = await sql.connect(config);
   
   const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
+    SELECT u.employee_id, w.code as warehouse_code
+    FROM users u
+    JOIN warehouses w ON w.id = u.warehouse_id
+    WHERE u.employee_id IN ('00089780', '00089916', '00098670', '00078692')
   `);
-  console.log('wcr_mapping check:');
+  console.log('User warehouses:');
   console.log(res.recordset);
 
   pool.close();

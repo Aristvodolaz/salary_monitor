@@ -9,15 +9,11 @@ const config = {
 };
 async function run() {
   const pool = await sql.connect(config);
-  
   const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
+    SELECT * FROM norms_employees_snapshot
+    WHERE snapshot_period = '2026-03-01–2026-03-31'
   `);
-  console.log('wcr_mapping check:');
-  console.log(res.recordset);
-
+  console.log(res.recordset.find(r => r.fio.includes('Абдиали')));
   pool.close();
 }
 run().catch(console.error);

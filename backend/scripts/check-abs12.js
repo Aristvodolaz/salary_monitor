@@ -10,13 +10,8 @@ const config = {
 async function run() {
   const pool = await sql.connect(config);
   
-  const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-  `);
-  console.log('wcr_mapping check:');
-  console.log(res.recordset);
+  const res = await pool.request().query("SELECT * FROM norms_employees_snapshot WHERE period_start = '2026-03-01' AND fio LIKE N'%Сопов%'");
+  console.log('Сопов in snapshot:', res.recordset);
 
   pool.close();
 }

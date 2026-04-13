@@ -9,15 +9,8 @@ const config = {
 };
 async function run() {
   const pool = await sql.connect(config);
-  
-  const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-  `);
-  console.log('wcr_mapping check:');
-  console.log(res.recordset);
-
+  const res = await pool.request().query("SELECT COUNT(*) as c FROM norms_employees_snapshot WHERE period_start = '2026-03-01'");
+  console.log('Snapshot count:', res.recordset[0].c);
   pool.close();
 }
 run().catch(console.error);

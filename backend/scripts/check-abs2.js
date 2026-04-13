@@ -9,15 +9,8 @@ const config = {
 };
 async function run() {
   const pool = await sql.connect(config);
-  
-  const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-  `);
-  console.log('wcr_mapping check:');
+  const res = await pool.request().query(`SELECT * FROM norms_employees_snapshot WHERE fio LIKE N'%Абдиали%'`);
   console.log(res.recordset);
-
   pool.close();
 }
 run().catch(console.error);

@@ -9,15 +9,9 @@ const config = {
 };
 async function run() {
   const pool = await sql.connect(config);
+  const res = await pool.request().query("SELECT operation_type, amount, operation_date, wcr_code FROM operations WHERE user_id = (SELECT id FROM users WHERE employee_id = '00075649') AND operation_date >= '2026-03-01' AND wcr_code LIKE 'FIX%'");
+  console.log('Fix ops for Долматов:', res.recordset);
   
-  const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-  `);
-  console.log('wcr_mapping check:');
-  console.log(res.recordset);
-
   pool.close();
 }
 run().catch(console.error);

@@ -11,11 +11,13 @@ async function run() {
   const pool = await sql.connect(config);
   
   const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
+    SELECT TOP 5 wcr_code, operation_date, count, amount, u.employee_id
+    FROM operations o
+    INNER JOIN users u ON u.id = o.user_id
+    WHERE o.operation_date >= '2026-03-01' AND o.operation_date < '2026-04-01'
+      AND u.employee_id IN ('00089780', '00089916')
   `);
-  console.log('wcr_mapping check:');
+  console.log('Operations for users:');
   console.log(res.recordset);
 
   pool.close();

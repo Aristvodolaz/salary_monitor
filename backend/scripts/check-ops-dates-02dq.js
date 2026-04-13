@@ -11,11 +11,11 @@ async function run() {
   const pool = await sql.connect(config);
   
   const res = await pool.request().query(`
-    SELECT * FROM wcr_mapping 
-    WHERE wcr_code IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
-       OR operation_type IN ('INB_CD', 'INB_MZ01', 'REPL_MZ01', 'UNLOAD')
+    SELECT TOP 5 wcr_code, operation_date, count, prod_count
+    FROM operations
+    WHERE operation_date >= '2026-03-01' AND warehouse_code = '02DQ'
   `);
-  console.log('wcr_mapping check:');
+  console.log('Sample operations 02DQ:');
   console.log(res.recordset);
 
   pool.close();

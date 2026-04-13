@@ -67,7 +67,7 @@ async function run() {
       LEFT JOIN operations o ON o.user_id = u.id 
         AND o.operation_date >= @startDate 
         AND o.operation_date < DATEADD(DAY, 1, CAST(@endDate AS DATE))
-        AND o.wcr_code NOT IN ('FIXAEIMAR', 'FIXPCKMAR', 'FIX_MARCH', 'FIXMARCH')
+        AND (o.wcr_code IS NULL OR o.wcr_code NOT IN ('FIXAEIMAR', 'FIXPCKMAR', 'FIX_MARCH', 'FIXMARCH'))
       WHERE u.employee_id IN (${excelData.map(d => `'${d.empId.padStart(8, '0')}'`).join(', ')})
       GROUP BY u.id, u.employee_id, w.code
     `);
