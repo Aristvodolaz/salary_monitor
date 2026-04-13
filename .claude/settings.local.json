@@ -97,7 +97,14 @@
       "Bash(node scripts/check-march-correct.js)",
       "Bash(find D:workkomusselarybackendsrc -name *.entity.ts -o -name *entity*)",
       "Bash(node scripts/diagnose-feb-amounts.js)",
-      "Bash(node scripts/diagnose-feb-missing.js)"
+      "Bash(node scripts/diagnose-feb-missing.js)",
+      "Bash(node scripts/resync-march-new-tariffs.js)",
+      "Bash(tasklist)",
+      "Bash(taskkill /f /pid 33612)",
+      "Bash(taskkill //f //pid 33612)",
+      "Bash(node scripts/resync-march-v2.js)",
+      "Bash(node scripts/compare-march.js)",
+      "Bash(node scripts/fix-march-amounts.js)"
     ]
   }
 }

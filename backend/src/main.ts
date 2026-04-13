@@ -17,7 +17,11 @@ async function bootstrap() {
 
   // CORS для фронтенда
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:3001'],
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3001',
+      'http://localhost:3017',
+    ],
     credentials: true,
   });
 

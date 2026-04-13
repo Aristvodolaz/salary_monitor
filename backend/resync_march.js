@@ -27,7 +27,7 @@ const SAP_USER = 'SALAR_TO_PWM';
 const SAP_PASS = '9pVQMGLC';
 
 const PERIOD_START = new Date('2026-03-01T00:00:00.000Z');
-const PERIOD_END   = new Date('2026-03-19T23:59:59.999Z');
+const PERIOD_END   = new Date('2026-03-31T23:59:59.999Z');
 const BATCH_SIZE   = 100;
 
 // Конкретный склад из аргументов или все
@@ -305,7 +305,7 @@ async function main() {
     FROM operations
     WHERE user_id=565
       AND operation_date >= '2026-03-01'
-      AND operation_date < '2026-03-01'
+      AND operation_date < '2026-04-01'
     GROUP BY operation_type, participant_area
     ORDER BY total_amount DESC
   `);

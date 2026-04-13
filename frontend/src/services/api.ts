@@ -144,10 +144,23 @@ export const normsAPI = {
   getPickingNorms: () => api.get('/norms/picking'),
   getPickingStats: (startDate: string, endDate: string, warehouseCode?: string) =>
     api.get('/norms/picking/stats', { params: { startDate, endDate, warehouseCode } }),
+  // ── Сотрудники ───────────────────────────────────────────────────────────────
+  getEmployees: (startDate: string, endDate: string) =>
+    api.get('/norms/employees', { params: { startDate, endDate } }),
+  getEmployeeDetail: (userId: number, startDate: string, endDate: string) =>
+    api.get(`/norms/employees/${userId}/detail`, { params: { startDate, endDate } }),
+  saveEmployeesSnapshot: (body: { startDate: string; endDate: string }) =>
+    api.post('/norms/employees/snapshot', body),
 };
 
 export const usersAPI = {
   getMe: () => api.get('/users/me'),
+};
+
+export const sapAPI = {
+  syncYesterday: () => api.post('/sap/sync'),
+  syncPeriod: (start: string, end: string) =>
+    api.post('/sap/sync-period', { start, end }, { timeout: 600_000 }), // до 10 мин
 };
 
 export default api;

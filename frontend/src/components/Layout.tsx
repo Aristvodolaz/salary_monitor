@@ -83,7 +83,7 @@ const Layout = () => {
   const menuItems = isAdmin
     ? [
         { text: 'Админ-панель', icon: <AdminPanelSettings />, path: '/admin' },
-        { text: 'Нормативы WCR', icon: <Rule />, path: '/norms' },
+        { text: 'Приемка и Хранение', icon: <Rule />, path: '/norms' },
       ]
     : [
         { text: 'Дашборд', icon: <Dashboard />, path: '/' },

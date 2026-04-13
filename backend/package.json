@@ -15,7 +15,9 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "sync:january": "node scripts/sync-january-2026.js",
     "sync:february": "node scripts/sync-february-2026.js",
-    "sync:march": "node scripts/sync-march-2026.js"
+    "sync:march": "node scripts/sync-march-2026.js",
+    "norms:snapshot": "node scripts/snapshot-norms-stats.js",
+    "norms:employees-snapshot": "node scripts/snapshot-norms-employees.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
