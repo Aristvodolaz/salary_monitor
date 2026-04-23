@@ -82,6 +82,7 @@ export const operationsAPI = {
 };
 
 export const adminAPI = {
+  getWarehouses: () => api.get<{ id: number; code: string; name: string }[]>('/admin/warehouses'),
   getEmployees: (warehouseId?: number) =>
     api.get('/admin/employees', { params: { warehouseId } }),
   getWarehouseSalary: (startDate: string, endDate: string, warehouseId?: number) =>

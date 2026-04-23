@@ -23,6 +23,15 @@ export class AdminController {
   constructor(private adminService: AdminService) {}
 
   /**
+   * GET /api/admin/warehouses
+   * Список всех активных складов (для дропдауна)
+   */
+  @Get('warehouses')
+  async getWarehouses() {
+    return this.adminService.getWarehouses();
+  }
+
+  /**
    * GET /api/admin/employees
    * Получить список сотрудников склада
    */

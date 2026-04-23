@@ -19,6 +19,10 @@ import {
   Tooltip,
   Skeleton,
   TableSortLabel,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import {
   Download,
@@ -423,6 +427,10 @@ const AdminPage = () => {
   const [expandedId, setExpandedId] = useState<string | number | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
 
+  // Warehouse filter
+  const [warehouses, setWarehouses] = useState<{ id: number; code: string; name: string }[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | ''>('');
+
   // Debug panel
   const [debugVisible, setDebugVisible] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -448,20 +456,28 @@ const AdminPage = () => {
     );
   }, [period, startDate, endDate]);
 
+  // Загрузка списка складов при монтировании
+  useEffect(() => {
+    adminAPI.getWarehouses()
+      .then((res) => setWarehouses(res.data))
+      .catch(() => {}); // список не критичен
+  }, []);
+
   // ── Data loading ─────────────────────────────────────────────────────────────
   useEffect(() => {
     loadData();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, selectedWarehouseId]);
 
   const loadData = async () => {
     setLoading(true);
     setError('');
     setExpandedId(null);
 
+    const whId = selectedWarehouseId || undefined;
     try {
       const [salaryRes, statsRes] = await Promise.all([
-        adminAPI.getWarehouseSalary(startDate, endDate),
-        adminAPI.getStats({ startDate, endDate }),
+        adminAPI.getWarehouseSalary(startDate, endDate, whId),
+        adminAPI.getStats({ startDate, endDate, warehouseId: whId }),
       ]);
       setSalaryData(salaryRes.data);
       setStats(statsRes.data);
@@ -560,7 +576,8 @@ const AdminPage = () => {
   // ── Export ───────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     try {
-      const response = await adminAPI.exportSalary(startDate, endDate);
+      const whId = selectedWarehouseId || undefined;
+      const response = await adminAPI.exportSalary(startDate, endDate, whId);
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -578,13 +595,17 @@ const AdminPage = () => {
     setExportingExcel(true);
     setError('');
     try {
-      const params: { startDate: string; endDate: string; employeeId?: number } = { startDate, endDate };
+      const params: { startDate: string; endDate: string; employeeId?: number; warehouseId?: number } = { startDate, endDate };
       if (expandedId !== null) params.employeeId = Number(expandedId);
+      if (selectedWarehouseId) params.warehouseId = selectedWarehouseId;
       const response = await adminAPI.exportExcel(params);
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `salary_${startDate}_${endDate}.xlsx`);
+      const whCode = selectedWarehouseId
+        ? warehouses.find((w) => w.id === selectedWarehouseId)?.code || selectedWarehouseId
+        : 'all';
+      link.setAttribute('download', `salary_${whCode}_${startDate}_${endDate}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -833,6 +854,22 @@ const AdminPage = () => {
             InputLabelProps={{ shrink: true }}
             sx={{ width: { xs: '100%', sm: 150 } }}
           />
+          {/* Warehouse selector */}
+          {warehouses.length > 0 && (
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>Склад</InputLabel>
+              <Select
+                label="Склад"
+                value={selectedWarehouseId}
+                onChange={(e) => { setSelectedWarehouseId(e.target.value as number | ''); setPage(0); }}
+              >
+                <MenuItem value=""><em>Все склады</em></MenuItem>
+                {warehouses.map((wh) => (
+                  <MenuItem key={wh.id} value={wh.id}>{wh.code} — {wh.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
         </Box>
 
         {/* Action buttons */}

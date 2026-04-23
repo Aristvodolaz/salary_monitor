@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
 import * as ExcelJS from 'exceljs';
 import { DatabaseService } from '../database/database.service';
@@ -14,17 +14,17 @@ export class AdminService {
   ) {}
 
   /**
+   * Получить список всех активных складов
+   */
+  async getWarehouses() {
+    return this.db.query(`SELECT id, code, name FROM warehouses WHERE is_active = 1 ORDER BY code`);
+  }
+
+  /**
    * Получить всех сотрудников склада (только для админа)
    */
   async getEmployeesByWarehouse(adminUser: any, warehouseId?: number) {
-    // Если не указан склад, используем склад админа
     const targetWarehouseId = warehouseId || adminUser.warehouseId;
-
-    // Проверка: админ может видеть только свой склад
-    if (adminUser.role === 'admin' && targetWarehouseId !== adminUser.warehouseId) {
-      throw new ForbiddenException('Вы можете видеть только сотрудников вашего склада');
-    }
-
     return this.usersService.findByWarehouse(targetWarehouseId);
   }
 
@@ -38,10 +38,6 @@ export class AdminService {
     warehouseId?: number,
   ) {
     const targetWarehouseId = warehouseId || adminUser.warehouseId;
-
-    if (adminUser.role === 'admin' && targetWarehouseId !== adminUser.warehouseId) {
-      throw new ForbiddenException('Вы можете видеть только данные вашего склада');
-    }
 
     const query = `
       SELECT 
@@ -171,10 +167,6 @@ export class AdminService {
    */
   async getWarehouseStats(adminUser: any, warehouseId?: number, startDate?: string, endDate?: string) {
     const targetWarehouseId = warehouseId || adminUser.warehouseId;
-
-    if (adminUser.role === 'admin' && targetWarehouseId !== adminUser.warehouseId) {
-      throw new ForbiddenException('Вы можете видеть только данные вашего склада');
-    }
 
     const query = `
       SELECT
