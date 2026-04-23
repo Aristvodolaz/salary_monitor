@@ -387,6 +387,9 @@ export class NormsService {
   /**
    * Список сотрудников с заработком по операциям из wcr_norms и wcr_picking_norms.
    * АЕИ и продуктовые задачи показаны отдельно.
+   *
+   * Фильтр склада — по фактическому operations.warehouse_code из SAP (Lgnum), а не по users.warehouse_id:
+   * иначе после upsert по employee_id операции видны не у того склада в отчёте.
    */
   async getNormsEmployees(
     warehouseId: number,
@@ -408,19 +411,19 @@ export class NormsService {
         -- Блок 2: Продуктовые задачи (wcr_picking_norms)
         ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL THEN ISNULL(o.prod_count, 0) ELSE 0 END), 0)
                                                                  AS total_prod,
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.rate IS NOT NULL
-                        THEN ISNULL(o.prod_count, 0) * wp.rate ELSE 0 END), 0)
-                                                                 AS picking_amount,
+        -- Комплектация: prod×ставка из справочника; если ставки нет (NULL) — сумма из синка SAP
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL THEN CASE WHEN wp.rate IS NOT NULL THEN ISNULL(o.prod_count, 0) * wp.rate
+                        ELSE ISNULL(o.amount, 0) END ELSE 0 END), 0) AS picking_amount,
         -- Итого
         ISNULL(SUM(CASE WHEN wn.wcr_code IS NOT NULL THEN o.amount ELSE 0 END), 0) +
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.rate IS NOT NULL
-                        THEN ISNULL(o.prod_count, 0) * wp.rate ELSE 0 END), 0)
-                                                                 AS total_amount
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL THEN CASE
+                        WHEN wp.rate IS NOT NULL THEN ISNULL(o.prod_count, 0) * wp.rate
+                        ELSE ISNULL(o.amount, 0) END ELSE 0 END), 0) AS total_amount
       FROM operations o
       INNER JOIN users u       ON o.user_id = u.id
       LEFT  JOIN wcr_norms wn  ON wn.wcr_code = o.wcr_code AND wn.is_active = 1
       LEFT  JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
-      WHERE u.warehouse_id = @warehouseId
+      WHERE o.warehouse_code = (SELECT code FROM warehouses WHERE id = @warehouseId)
         AND u.is_active = 1
         AND u.employee_id != '00000000'
         AND o.operation_date >= @startDate
@@ -428,6 +431,72 @@ export class NormsService {
         AND (wn.wcr_code IS NOT NULL OR wp.wcr_code IS NOT NULL)
       GROUP BY u.id, u.employee_id, u.fio
       ORDER BY total_amount DESC
+      `,
+      { warehouseId, startDate, endDate },
+    );
+  }
+
+  /**
+   * Полная выгрузка за период: все сотрудники × все WCR-коды.
+   * Блок 1 (АЕИ) + Блок 2 (Комплектация) в одном результате.
+   * Используется для экспорта в CSV.
+   */
+  async getFullExportRows(
+    warehouseId: number,
+    startDate: string,
+    endDate: string,
+  ): Promise<any[]> {
+    return this.db.query(
+      `
+      -- ── Блок 2: Комплектация (wcr_picking_norms, prod_count) ─────────────
+      SELECT
+        N'Комплектация'                                        AS block_type,
+        o.wcr_code,
+        u.employee_id,
+        u.fio,
+        SUM(ISNULL(o.prod_count, 0))                          AS cnt,
+        wp.description_new                                     AS description,
+        wp.norm_label,
+        wp.rate,
+        SUM(CASE WHEN wp.rate IS NOT NULL
+                 THEN ISNULL(o.prod_count, 0) * wp.rate
+                 ELSE ISNULL(o.amount, 0) END)                AS amount
+      FROM operations o
+      INNER JOIN users u              ON o.user_id = u.id
+      INNER JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
+      WHERE o.warehouse_code = (SELECT code FROM warehouses WHERE id = @warehouseId)
+        AND u.is_active = 1
+        AND u.employee_id != '00000000'
+        AND o.operation_date >= @startDate
+        AND o.operation_date <  DATEADD(DAY, 1, CAST(@endDate AS DATE))
+      GROUP BY o.wcr_code, u.employee_id, u.fio,
+               wp.description_new, wp.norm_label, wp.rate
+
+      UNION ALL
+
+      -- ── Блок 1: АЕИ (wcr_norms, count) ──────────────────────────────────
+      SELECT
+        N'АЕИ'                                                AS block_type,
+        o.wcr_code,
+        u.employee_id,
+        u.fio,
+        SUM(o.count)                                          AS cnt,
+        wn.description,
+        wn.norm_type                                          AS norm_label,
+        NULL                                                  AS rate,
+        SUM(o.amount)                                         AS amount
+      FROM operations o
+      INNER JOIN users u         ON o.user_id = u.id
+      INNER JOIN wcr_norms wn    ON wn.wcr_code = o.wcr_code AND wn.is_active = 1
+      WHERE o.warehouse_code = (SELECT code FROM warehouses WHERE id = @warehouseId)
+        AND u.is_active = 1
+        AND u.employee_id != '00000000'
+        AND o.operation_date >= @startDate
+        AND o.operation_date <  DATEADD(DAY, 1, CAST(@endDate AS DATE))
+      GROUP BY o.wcr_code, u.employee_id, u.fio,
+               wn.description, wn.norm_type
+
+      ORDER BY u.fio, block_type DESC, o.wcr_code
       `,
       { warehouseId, startDate, endDate },
     );
@@ -459,7 +528,7 @@ export class NormsService {
         INNER JOIN wcr_norms wn ON wn.wcr_code = o.wcr_code AND wn.is_active = 1
         INNER JOIN users u ON o.user_id = u.id
         WHERE u.id = @employeeId
-          AND u.warehouse_id = @warehouseId
+          AND o.warehouse_code = (SELECT code FROM warehouses WHERE id = @warehouseId)
           AND o.operation_date >= @startDate
           AND o.operation_date <  DATEADD(DAY, 1, CAST(@endDate AS DATE))
         GROUP BY o.wcr_code, wn.description, wn.norm_type
@@ -477,7 +546,9 @@ export class NormsService {
           wp.picking_type,
           wp.rate,
           SUM(ISNULL(o.prod_count, 0))  AS total_prod,
-          SUM(ISNULL(o.prod_count, 0) * ISNULL(wp.rate, 0)) AS total_amount,
+          SUM(CASE WHEN wp.rate IS NOT NULL
+                   THEN ISNULL(o.prod_count, 0) * wp.rate
+                   ELSE ISNULL(o.amount, 0) END) AS total_amount,
           COUNT(*)                       AS operations_count,
           MIN(o.operation_date)          AS first_date,
           MAX(o.operation_date)          AS last_date
@@ -485,10 +556,10 @@ export class NormsService {
         INNER JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
         INNER JOIN users u ON o.user_id = u.id
         WHERE u.id = @employeeId
-          AND u.warehouse_id = @warehouseId
+          AND o.warehouse_code = (SELECT code FROM warehouses WHERE id = @warehouseId)
           AND o.operation_date >= @startDate
           AND o.operation_date <  DATEADD(DAY, 1, CAST(@endDate AS DATE))
-          AND ISNULL(o.prod_count, 0) > 0
+          AND (ISNULL(o.prod_count, 0) > 0 OR ISNULL(o.amount, 0) <> 0)
         GROUP BY o.wcr_code, wp.description_new, wp.participant_area, wp.picking_type, wp.rate
         ORDER BY total_amount DESC
         `,

@@ -29,6 +29,22 @@ export class AdminService {
   }
 
   /**
+   * Суперадмин: видит все склады (role === 'superadmin')
+   */
+  private isSuperAdmin(adminUser: any): boolean {
+    return adminUser.role === 'superadmin';
+  }
+
+  /**
+   * SQL-фильтр по секции: 'picking' | 'receiving' | undefined (все)
+   */
+  private sectionFilter(section?: string): string {
+    if (section === 'picking')   return `AND ISNULL(sd.participant_area,'') NOT IN ('Приемка и Хранение','') AND sd.base_amount > 0`;
+    if (section === 'receiving') return `AND sd.participant_area = 'Приемка и Хранение' AND sd.base_amount > 0`;
+    return `AND sd.base_amount > 0`;
+  }
+
+  /**
    * Получить зарплату всех сотрудников склада за период
    */
   async getWarehouseSalary(
@@ -36,7 +52,64 @@ export class AdminService {
     startDate: string,
     endDate: string,
     warehouseId?: number,
+    section?: string,
   ) {
+    const sf = this.sectionFilter(section);
+
+    // Суперадмин — видит все склады (или конкретный если указан warehouseId)
+    if (this.isSuperAdmin(adminUser)) {
+      if (warehouseId) {
+        const query = `
+          SELECT
+            sd.user_id,
+            u.employee_id,
+            u.fio,
+            sd.warehouse_code,
+            sd.warehouse_name,
+            COUNT(DISTINCT CAST(sd.operation_date AS DATE)) as work_days,
+            COUNT(DISTINCT sd.operation_id) as total_operations,
+            SUM(sd.aei_count) as total_aei,
+            SUM(sd.base_amount) as total_amount
+          FROM v_salary_details sd
+          INNER JOIN users u ON sd.user_id = u.id
+          WHERE sd.warehouse_id = @warehouseId
+            AND sd.operation_date >= @startDate
+            AND sd.operation_date <= @endDate
+            AND u.employee_id != '00000000'
+            AND u.is_active = 1
+            ${sf}
+          GROUP BY sd.user_id, u.employee_id, u.fio, sd.warehouse_code, sd.warehouse_name
+          ORDER BY total_amount DESC
+        `;
+        return this.db.query(query, { warehouseId, startDate, endDate });
+      }
+
+      // Все склады
+      const query = `
+        SELECT
+          sd.user_id,
+          u.employee_id,
+          u.fio,
+          sd.warehouse_code,
+          sd.warehouse_name,
+          COUNT(DISTINCT CAST(sd.operation_date AS DATE)) as work_days,
+          COUNT(DISTINCT sd.operation_id) as total_operations,
+          SUM(sd.aei_count) as total_aei,
+          SUM(sd.base_amount) as total_amount
+        FROM v_salary_details sd
+        INNER JOIN users u ON sd.user_id = u.id
+        WHERE sd.operation_date >= @startDate
+          AND sd.operation_date <= @endDate
+          AND u.employee_id != '00000000'
+          AND u.is_active = 1
+          ${sf}
+        GROUP BY sd.user_id, u.employee_id, u.fio, sd.warehouse_code, sd.warehouse_name
+        ORDER BY sd.warehouse_code, total_amount DESC
+      `;
+      return this.db.query(query, { startDate, endDate });
+    }
+
+    // Обычный admin — только свой склад
     const targetWarehouseId = warehouseId || adminUser.warehouseId;
 
     if (adminUser.role === 'admin' && targetWarehouseId !== adminUser.warehouseId) {
@@ -44,10 +117,12 @@ export class AdminService {
     }
 
     const query = `
-      SELECT 
+      SELECT
         sd.user_id,
         u.employee_id,
         u.fio,
+        sd.warehouse_code,
+        sd.warehouse_name,
         COUNT(DISTINCT CAST(sd.operation_date AS DATE)) as work_days,
         COUNT(DISTINCT sd.operation_id) as total_operations,
         SUM(sd.aei_count) as total_aei,
@@ -58,7 +133,8 @@ export class AdminService {
         AND sd.operation_date >= @startDate
         AND sd.operation_date <= @endDate
         AND u.employee_id != '00000000'
-      GROUP BY sd.user_id, u.employee_id, u.fio
+        ${sf}
+      GROUP BY sd.user_id, u.employee_id, u.fio, sd.warehouse_code, sd.warehouse_name
       ORDER BY total_amount DESC
     `;
 
@@ -78,12 +154,13 @@ export class AdminService {
     offset = 0,
   ) {
     // Считаем итого (с учётом принадлежности к складу администратора)
+    const whFilter = this.isSuperAdmin(adminUser) ? '' : 'AND u.warehouse_id = @warehouseId';
     const countQuery = `
       SELECT COUNT(*) as total
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
-        AND u.warehouse_id = @warehouseId
+        ${whFilter}
         AND sd.operation_date >= @startDate
         AND sd.operation_date <= @endDate
     `;
@@ -111,7 +188,7 @@ export class AdminService {
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
-        AND u.warehouse_id = @warehouseId
+        ${whFilter}
         AND sd.operation_date >= @startDate
         AND sd.operation_date <= @endDate
       ORDER BY sd.operation_date DESC
@@ -170,6 +247,30 @@ export class AdminService {
    * Статистика склада
    */
   async getWarehouseStats(adminUser: any, warehouseId?: number, startDate?: string, endDate?: string) {
+    if (this.isSuperAdmin(adminUser)) {
+      const warehouseFilter = warehouseId ? 'AND sd.warehouse_id = @warehouseId' : '';
+      const query = `
+        SELECT
+          COUNT(DISTINCT sd.user_id) as active_employees,
+          COUNT(DISTINCT sd.operation_type) as operation_types,
+          SUM(sd.aei_count) as total_aei,
+          SUM(sd.base_amount) as total_amount,
+          COUNT(*) as total_operations
+        FROM v_salary_details sd
+        INNER JOIN users u ON sd.user_id = u.id
+        WHERE (@startDate IS NULL OR sd.operation_date >= @startDate)
+          AND (@endDate IS NULL OR sd.operation_date <= @endDate)
+          AND u.employee_id != '00000000'
+          AND u.is_active = 1
+          ${warehouseFilter}
+      `;
+      return this.db.queryOne(query, {
+        warehouseId: warehouseId || null,
+        startDate: startDate || null,
+        endDate: endDate || null,
+      });
+    }
+
     const targetWarehouseId = warehouseId || adminUser.warehouseId;
 
     if (adminUser.role === 'admin' && targetWarehouseId !== adminUser.warehouseId) {
@@ -214,6 +315,7 @@ export class AdminService {
     startDate: string,
     endDate: string,
   ) {
+    const whFilter2 = this.isSuperAdmin(adminUser) ? '' : 'AND u.warehouse_id = @warehouseId';
     const query = `
       SELECT
         sd.operation_type,
@@ -227,7 +329,7 @@ export class AdminService {
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
-        AND u.warehouse_id = @warehouseId
+        ${whFilter2}
         AND sd.operation_date >= @startDate
         AND sd.operation_date <= @endDate
       GROUP BY sd.operation_type, sd.participant_area
@@ -255,12 +357,13 @@ export class AdminService {
     limit = 20,
     offset = 0,
   ) {
+    const whFilter3 = this.isSuperAdmin(adminUser) ? '' : 'AND u.warehouse_id = @warehouseId';
     const countQuery = `
       SELECT COUNT(*) as total
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
-        AND u.warehouse_id = @warehouseId
+        ${whFilter3}
         AND sd.operation_date >= @startDate
         AND sd.operation_date <= @endDate
         AND sd.operation_type = @operationType
@@ -291,7 +394,7 @@ export class AdminService {
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
-        AND u.warehouse_id = @warehouseId
+        ${whFilter3}
         AND sd.operation_date >= @startDate
         AND sd.operation_date <= @endDate
         AND sd.operation_type = @operationType

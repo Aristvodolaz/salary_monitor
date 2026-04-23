@@ -206,24 +206,34 @@ export class SapIntegrationService {
         const chunk = chunks[i];
         this.logger.log(`   --- Чанк ${i + 1}/${chunks.length}: ${chunk.startDate.toISOString().slice(0, 10)} - ${chunk.endDate.toISOString().slice(0, 10)} ---`);
         
-        // Fetch
+        // Fetch — все страницы OData (d.__next)
         const filter = this.buildODataFilter(warehouseCode, chunk.startDate, chunk.endDate);
         const url    = `/WHOSet?${filter}&$format=json`;
         const label  = `Чанк ${i + 1}/${chunks.length} [${warehouseCode}]`;
-        
-        const items = await this.withRetry(
-          async () => {
-            const resp  = await this.axiosInstance.get(url, { timeout: 180_000 });
-            return resp.data?.d?.results || [];
-          },
-          { label, maxAttempts: 3 },
-        );
-        
-        this.logger.log(`   📡 Получено ${items.length} записей из SAP`);
+
+        const items = await this.fetchAllPages(url, label);
+
+        this.logger.log(`   📡 Получено ${items.length} записей из SAP (все страницы)`);
         if (items.length === 0) continue;
 
-        const operations: OperationRow[] = [];
+        const dedupMap = new Map<string, OperationRow>();
         const newUsers = new Map<string, { fio: string }>();
+        
+        const addOp = (row: OperationRow) => {
+          const key = `${row.userId}_${row.sapOrderId || 'null'}_${row.operationType}_${row.wcrCode || 'null'}`;
+          const existing = dedupMap.get(key);
+          if (existing) {
+            existing.count += row.count;
+            existing.prodCount += row.prodCount;
+            existing.amount += row.amount;
+            existing.actdura += row.actdura;
+            if (row.operationDate > existing.operationDate) {
+              existing.operationDate = row.operationDate;
+            }
+          } else {
+            dedupMap.set(key, row);
+          }
+        };
 
         for (const item of items) {
           const parsed = this.parseItem(item);
@@ -243,27 +253,23 @@ export class SapIntegrationService {
             continue;
           }
 
-          operations.push(this.buildNormsRow(parsed, userId, warehouseCode, ctx));
+          addOp(this.buildNormsRow(parsed, userId, warehouseCode, ctx));
         }
 
         // Создаём новых пользователей (если есть) и добавляем их записи
         if (newUsers.size > 0) {
-          await this.createNewUsers(newUsers, ctx);
-          const fresh = await this.db.query<{ employee_id: string; id: number }>(
-            `SELECT id, employee_id FROM users WHERE warehouse_id = @wid`,
-            { wid: ctx.warehouseId },
-          );
-          fresh.forEach((u) => ctx.userMap.set(u.employee_id, u.id));
+          await this.upsertSapUsers(newUsers, ctx);
 
           for (const item of items) {
             const parsed = this.parseItem(item);
             if (!parsed || !normsSet.has(parsed.wcr) || !newUsers.has(parsed.employeeId)) continue;
             const userId2 = ctx.userMap.get(parsed.employeeId);
             if (userId2 !== undefined)
-              operations.push(this.buildNormsRow(parsed, userId2, warehouseCode, ctx));
+              addOp(this.buildNormsRow(parsed, userId2, warehouseCode, ctx));
           }
         }
 
+        const operations = Array.from(dedupMap.values());
         // Удаляем и вставляем заново
         for (let b = 0; b < operations.length; b += this.BATCH_SIZE) {
           await this.bulkInsertNormsOperations(operations.slice(b, b + this.BATCH_SIZE));
@@ -292,7 +298,7 @@ export class SapIntegrationService {
     const operationType  = wcrEntry?.operation_type  ?? parsed.wcr;
     const participantArea = wcrEntry?.participant_area ?? '';
     const tariff         = ctx.tariffMap.get(operationType);
-    const amount         = (participantArea === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * (tariff?.rate ?? 0);
+    const amount         = (participantArea === 'Приемка и Хранение' ? parsed.aeiCount : parsed.prodCount) * (tariff?.rate ?? 0);
 
     return {
       userId,
@@ -382,56 +388,53 @@ export class SapIntegrationService {
         const chunk = chunks[i];
         this.logger.log(`   --- Чанк ${i + 1}/${chunks.length}: ${chunk.startDate.toISOString().slice(0, 10)} - ${chunk.endDate.toISOString().slice(0, 10)} ---`);
         
-        // Fetch
+        // Fetch — все страницы OData (d.__next)
         const filter = this.buildODataFilter(warehouseCode, chunk.startDate, chunk.endDate);
         const url    = `/WHOSet?${filter}&$format=json`;
         const label  = `Чанк ${i + 1}/${chunks.length} [${warehouseCode}]`;
-        
-        const items = await this.withRetry(
-          async () => {
-            const resp  = await this.axiosInstance.get(url, { timeout: 180_000 });
-            return resp.data?.d?.results || [];
-          },
-          { label, maxAttempts: 3 },
-        );
-        
-        this.logger.log(`   📡 Получено ${items.length} записей`);
+
+        const items = await this.fetchAllPages(url, label);
+
+        this.logger.log(`   📡 Получено ${items.length} записей (все страницы)`);
         if (items.length === 0) continue;
 
         // Маппинг и новые юзеры
         const newUsers = new Map<string, { fio: string }>();
-        const operations: OperationRow[] = [];
+        const dedupMap = new Map<string, OperationRow>();
 
-        const resolveOperation = (item: any): OperationRow | null => {
-          const parsed = this.parseItem(item);
-          if (!parsed) { skippedNoAei++; return null; }
-
-          const wcrEntry = ctx.wcrMap.get(parsed.wcr);
-          if (!wcrEntry) { skippedNoWcr++; return null; }
-
-          const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
-          if (!tariff) {
-            skippedNoTariff++;
-            missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
-            return null;
+        const addOp = (row: OperationRow) => {
+          const key = `${row.userId}_${row.sapOrderId || 'null'}_${row.operationType}_${row.wcrCode || 'null'}`;
+          const existing = dedupMap.get(key);
+          if (existing) {
+            existing.count += row.count;
+            existing.prodCount += row.prodCount;
+            existing.amount += row.amount;
+            existing.actdura += row.actdura;
+            if (row.operationDate > existing.operationDate) {
+              existing.operationDate = row.operationDate;
+            }
+          } else {
+            dedupMap.set(key, row);
           }
+        };
 
-          const userId = ctx.userMap.get(parsed.employeeId);
-          if (userId === undefined) return null;
-
+        // ── Единая функция маппинга — НЕ бросает ни одну запись из SAP ──────────
+        // Если WCR нет в mapping  → operation_type = сам wcr_code, amount = 0
+        // Если нет тарифа         → amount = 0
+        // Счётчики для диагностики в лог остаются, но запись всё равно сохраняется
+        const buildRow = (parsed: NonNullable<ReturnType<typeof this.parseItem>>, userId: number): OperationRow => {
+          const wcrEntry        = ctx.wcrMap.get(parsed.wcr);
+          const operationType   = wcrEntry?.operation_type  ?? parsed.wcr;
+          const participantArea = wcrEntry?.participant_area ?? '';
+          const tariff          = ctx.tariffMap.get(operationType);
+          const cnt             = participantArea === 'Приемка и Хранение' ? parsed.aeiCount : parsed.prodCount;
+          const amount          = cnt * (tariff?.rate ?? 0);
           return {
-            userId,
-            warehouseCode,
-            operationType:   wcrEntry.operation_type,
-            participantArea: wcrEntry.participant_area,
-            count:     parsed.aeiCount,
-            prodCount: parsed.prodCount,
-            actdura:   parsed.actdura,
-            operationDate: parsed.operationDate,
-            amount: (wcrEntry.participant_area === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * tariff.rate,
-            sapOrderId: parsed.sapOrderId,
-            wcrCode: parsed.wcr || null,
-            aarea:   parsed.aarea || null,
+            userId, warehouseCode, operationType, participantArea,
+            count: parsed.aeiCount, prodCount: parsed.prodCount,
+            actdura: parsed.actdura, operationDate: parsed.operationDate,
+            amount, sapOrderId: parsed.sapOrderId,
+            wcrCode: parsed.wcr || null, aarea: parsed.aarea || null,
           };
         };
 
@@ -439,14 +442,15 @@ export class SapIntegrationService {
           const parsed = this.parseItem(item);
           if (!parsed) { skippedNoAei++; continue; }
 
+          // Диагностика: считаем неизвестные WCR и тарифы (но НЕ пропускаем)
           const wcrEntry = ctx.wcrMap.get(parsed.wcr);
-          if (!wcrEntry) { skippedNoWcr++; continue; }
-
-          const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
-          if (!tariff) {
-            skippedNoTariff++;
-            missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
-            continue;
+          if (!wcrEntry) skippedNoWcr++;
+          else {
+            const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
+            if (!tariff) {
+              skippedNoTariff++;
+              missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
+            }
           }
 
           const userId = ctx.userMap.get(parsed.employeeId);
@@ -456,42 +460,26 @@ export class SapIntegrationService {
                 || `Сотрудник ${parsed.employeeId}`;
               newUsers.set(parsed.employeeId, { fio });
             }
-            continue;
+            continue; // вернёмся к этим записям после создания юзера
           }
 
-          operations.push({
-            userId,
-            warehouseCode,
-            operationType:   wcrEntry.operation_type,
-            participantArea: wcrEntry.participant_area,
-            count:           parsed.aeiCount,
-            prodCount:       parsed.prodCount,
-            actdura:         parsed.actdura,
-            operationDate:   parsed.operationDate,
-            amount:          (wcrEntry.participant_area === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * tariff.rate,
-            sapOrderId:      parsed.sapOrderId,
-            wcrCode:         parsed.wcr || null,
-            aarea:           parsed.aarea || null,
-          });
+          addOp(buildRow(parsed, userId));
         }
 
+        // Создаём новых сотрудников и ПОВТОРНО обрабатываем ВСЕ их записи (включая неизвестные WCR)
         if (newUsers.size > 0) {
-          await this.createNewUsers(newUsers, ctx);
-          const freshUsers = await this.db.query<{ employee_id: string; id: number }>(
-            `SELECT id, employee_id FROM users WHERE warehouse_id = @wid`,
-            { wid: ctx.warehouseId },
-          );
-          freshUsers.forEach((u) => ctx.userMap.set(u.employee_id, u.id));
+          await this.upsertSapUsers(newUsers, ctx);
 
           for (const item of items) {
             const parsed = this.parseItem(item);
             if (!parsed || !newUsers.has(parsed.employeeId)) continue;
-            const resolved = resolveOperation(item);
-            if (resolved) operations.push(resolved);
+            const userId2 = ctx.userMap.get(parsed.employeeId);
+            if (userId2 !== undefined) addOp(buildRow(parsed, userId2));
           }
         }
 
-        this.logger.log(`   💾 Подготовлено к сохранению в чанке: ${operations.length}`);
+        const operations = Array.from(dedupMap.values());
+        this.logger.log(`   💾 Подготовлено к сохранению в чанке: ${operations.length} (уникальных из ${items.length} SAP)`);
         for (let b = 0; b < operations.length; b += this.BATCH_SIZE) {
           const batchSlice = operations.slice(b, b + this.BATCH_SIZE);
           await this.bulkUpsertOperations(batchSlice);
@@ -583,49 +571,51 @@ export class SapIntegrationService {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // SAP: параллельная загрузка чанков
+  // SAP: загрузка одного чанка с поддержкой OData-пагинации
   // ──────────────────────────────────────────────────────────────
 
-  private async fetchChunksParallel(warehouseCode: string, chunks: DateChunk[]): Promise<any[]> {
-    const results: any[] = [];
+  /**
+   * Загружает ВСЕ страницы OData для указанного URL.
+   * SAP возвращает d.results (текущая страница) и d.__next (URL следующей страницы).
+   * Без обхода __next теряются все записи после первой страницы (~1000 строк).
+   */
+  private async fetchAllPages(initialUrl: string, label: string): Promise<any[]> {
+    const all: any[] = [];
+    let url: string | null = initialUrl;
+    let page = 0;
 
-    for (let i = 0; i < chunks.length; i += this.CHUNK_CONCURRENCY) {
-      const batch = chunks.slice(i, i + this.CHUNK_CONCURRENCY);
-      const batchData = await Promise.all(
-        batch.map((chunk, j) =>
-          this.fetchChunkWithRetry(warehouseCode, chunk, i + j, chunks.length),
-        ),
+    while (url) {
+      page++;
+      const pageUrl = url;
+      const items = await this.withRetry(
+        async () => {
+          const resp = await this.axiosInstance.get(pageUrl, { timeout: 180_000 });
+          return resp.data?.d ?? {};
+        },
+        { label: `${label} стр.${page}`, maxAttempts: 3 },
       );
-      // Избегаем spread для больших массивов (переполнение стека)
-      for (const items of batchData) {
-        for (const item of items) results.push(item);
+
+      const pageItems: any[] = items.results || [];
+      for (const item of pageItems) all.push(item);
+
+      // OData v2: следующая страница в d.__next
+      const next: string | undefined = items.__next;
+      if (next) {
+        this.logger.log(`   📄 ${label} стр.${page}: ${pageItems.length} зап., есть следующая страница`);
+        // __next может быть абсолютным URL — берём только path+query
+        try {
+          const parsed = new URL(next);
+          url = parsed.pathname + parsed.search;
+        } catch {
+          url = next; // уже relative
+        }
+      } else {
+        this.logger.log(`   📄 ${label} стр.${page}: ${pageItems.length} зап. (последняя)`);
+        url = null;
       }
     }
 
-    return results;
-  }
-
-  private async fetchChunkWithRetry(
-    warehouseCode: string,
-    chunk: DateChunk,
-    idx: number,
-    total: number,
-  ): Promise<any[]> {
-    const filter = this.buildODataFilter(warehouseCode, chunk.startDate, chunk.endDate);
-    const url    = `/WHOSet?${filter}&$format=json`;
-    const label  = `Окно ${idx + 1}/${total} [${warehouseCode}] ` +
-                   `${chunk.startDate.toISOString().slice(0, 10)}`;
-
-    return this.withRetry(
-      async () => {
-        this.logger.log(`   🔗 Запрос: ${this.axiosInstance.defaults.baseURL}${url}`);
-        const resp  = await this.axiosInstance.get(url, { timeout: 180_000 });
-        const items = resp.data?.d?.results || [];
-        this.logger.log(`   📡 ${label} → ${items.length} записей`);
-        return items;
-      },
-      { label, maxAttempts: 3 },
-    );
+    return all;
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -642,7 +632,16 @@ export class SapIntegrationService {
     const prodCount = Math.round(parseFloat(item.ZprodWtItm   || '0'));
     if (aeiCount <= 0 && prodCount <= 0) return null;
 
-    const employeeId = (item.Employeeid || item.Processor || '').trim();
+    let employeeId = (item.Employeeid || item.Processor || '').trim();
+    // PC-пользователи присылают Employeeid=00000000 — берём CreatedBy.
+    // Если это числовой ШК, приводим к формату 8 цифр с ведущими нулями.
+    if (/^0+$/.test(employeeId)) {
+      const fromCreated = (item.CreatedBy || '').trim();
+      if (fromCreated) employeeId = fromCreated;
+    }
+    if (/^\d+$/.test(employeeId) && employeeId.length < 8) {
+      employeeId = employeeId.padStart(8, '0');
+    }
     if (!employeeId) return null;
 
     // Дата из формата /Date(timestamp)/
@@ -756,6 +755,7 @@ export class SapIntegrationService {
           target.user_id = source.user_id
           AND target.sap_order_id = source.sap_order_id
           AND target.operation_type = source.operation_type
+          AND ISNULL(target.wcr_code, '') = ISNULL(source.wcr_code, '')
         )
         WHEN MATCHED THEN
           UPDATE SET
@@ -782,25 +782,47 @@ export class SapIntegrationService {
   // СОЗДАНИЕ НОВЫХ ПОЛЬЗОВАТЕЛЕЙ
   // ──────────────────────────────────────────────────────────────
 
-  private async createNewUsers(
+  /** SAP-сотрудники: upsert по employee_id (глобальный UNIQUE), warehouse_id только при INSERT */
+  private async upsertSapUsers(
     newUsers: Map<string, { fio: string }>,
     ctx: SyncContext,
   ): Promise<void> {
-    this.logger.log(`   👤 Создание ${newUsers.size} новых сотрудников...`);
+    this.logger.log(`   👤 Upsert сотрудников (по employee_id): ${newUsers.size}...`);
 
     for (const [employeeId, { fio }] of newUsers) {
-      try {
-        await this.db.execute(
-          `INSERT INTO users (employee_id, fio, warehouse_id, role, is_active)
-           VALUES (@employeeId, @fio, @warehouseId, 'employee', 1)`,
-          { employeeId, fio, warehouseId: ctx.warehouseId },
-        );
-        this.logger.log(`   ✅ Создан: ${employeeId} (${fio})`);
-      } catch (err) {
-        // Игнорируем гонку при параллельной обработке складов
-        if (!err.message?.includes('UNIQUE') && !err.message?.includes('duplicate')) throw err;
-        this.logger.warn(`   ⚠️  Дубликат (параллельный insert): ${employeeId}`);
-      }
+      await this.db.execute(
+        `MERGE users AS t
+         USING (SELECT @employeeId AS employee_id, @fio AS fio, @warehouseId AS warehouse_id) AS s
+         ON t.employee_id = s.employee_id
+         WHEN MATCHED THEN
+           UPDATE SET t.fio = s.fio, t.is_active = 1, t.warehouse_id = s.warehouse_id
+         WHEN NOT MATCHED THEN
+           INSERT (employee_id, fio, warehouse_id, role, is_active)
+           VALUES (s.employee_id, s.fio, s.warehouse_id, N'employee', 1);`,
+        { employeeId, fio, warehouseId: ctx.warehouseId },
+      );
+    }
+
+    await this.refreshUserMapByEmployeeIds(ctx, [...newUsers.keys()]);
+  }
+
+  /** Подставляет id в ctx.userMap для любых складов — нужно после upsert общих SAP-login вроде PI_* */
+  private async refreshUserMapByEmployeeIds(
+    ctx: SyncContext,
+    employeeIds: string[],
+  ): Promise<void> {
+    if (employeeIds.length === 0) return;
+
+    const pool  = this.db.getPool();
+    const req   = pool.request();
+    employeeIds.forEach((id, idx) => req.input(`uid${idx}`, sql.NVarChar(64), id));
+    const inSql = employeeIds.map((_, idx) => `@uid${idx}`).join(', ');
+    const rs    = await req.query<{ id: number; employee_id: string }>(
+      `SELECT id, employee_id FROM users WHERE employee_id IN (${inSql})`,
+    );
+
+    for (const row of rs.recordset || []) {
+      ctx.userMap.set(row.employee_id, row.id);
     }
   }
 

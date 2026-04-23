@@ -13,6 +13,8 @@ import {
   Button,
   Grid,
   IconButton,
+  Tabs,
+  Tab,
   Collapse,
   InputAdornment,
   Chip,
@@ -40,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { adminAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { format, subDays, startOfMonth } from 'date-fns';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -396,6 +399,13 @@ const CustomPagination = ({
 
 // ── Admin Page ─────────────────────────────────────────────────────────────────
 const AdminPage = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'superadmin';
+
+  // Вкладки: picking = Комплектация, receiving = Приёмка и Хранение
+  type Section = 'picking' | 'receiving';
+  const [section, setSection] = useState<Section>('picking');
+
   const [salaryData, setSalaryData] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -451,7 +461,7 @@ const AdminPage = () => {
   // ── Data loading ─────────────────────────────────────────────────────────────
   useEffect(() => {
     loadData();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, section]);
 
   const loadData = async () => {
     setLoading(true);
@@ -460,7 +470,7 @@ const AdminPage = () => {
 
     try {
       const [salaryRes, statsRes] = await Promise.all([
-        adminAPI.getWarehouseSalary(startDate, endDate),
+        adminAPI.getWarehouseSalary(startDate, endDate, undefined, section),
         adminAPI.getStats({ startDate, endDate }),
       ]);
       setSalaryData(salaryRes.data);
@@ -507,9 +517,13 @@ const AdminPage = () => {
       (emp) =>
         emp.fio?.toLowerCase().includes(q) ||
         String(emp.employee_id || '').includes(q) ||
-        String(emp.user_id || '').includes(q),
+        String(emp.user_id || '').includes(q) ||
+        (isSuperAdmin && (
+          emp.warehouse_code?.toLowerCase().includes(q) ||
+          emp.warehouse_name?.toLowerCase().includes(q)
+        )),
     );
-  }, [salaryData, search]);
+  }, [salaryData, search, isSuperAdmin]);
 
   const sorted = useMemo(() => {
     const data = [...filtered];
@@ -721,6 +735,36 @@ const AdminPage = () => {
           </Box>
         }
       />
+
+      {/* ── Section tabs ── */}
+      <Box
+        sx={{
+          mb: 3,
+          borderBottom: '1px solid var(--color-border)',
+        }}
+      >
+        <Tabs
+          value={section}
+          onChange={(_, v) => { setSection(v); setPage(0); setSearch(''); setSearchInput(''); }}
+          textColor="inherit"
+          TabIndicatorProps={{ style: { backgroundColor: 'var(--color-red)' } }}
+          sx={{
+            '& .MuiTab-root': {
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              color: 'var(--color-text-secondary)',
+              textTransform: 'none',
+              minHeight: 44,
+            },
+            '& .Mui-selected': {
+              color: 'var(--color-text-primary) !important',
+            },
+          }}
+        >
+          <Tab value="picking" label="Комплектация" />
+          <Tab value="receiving" label="Приёмка и Хранение" />
+        </Tabs>
+      </Box>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
@@ -950,7 +994,7 @@ const AdminPage = () => {
         <Box sx={{ px: 3, pt: 2.5, pb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--color-text-primary)', fontSize: '1rem' }}>
-              Зарплаты за период
+              {section === 'picking' ? 'Комплектация' : 'Приёмка и Хранение'}
             </Typography>
             {!loading && (
               <Typography variant="caption" sx={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
@@ -999,6 +1043,9 @@ const AdminPage = () => {
                       Сотрудник
                     </TableSortLabel>
                   </TableCell>
+                  {isSuperAdmin && (
+                    <TableCell sx={{ minWidth: 120 }}>Склад</TableCell>
+                  )}
                   <TableCell align="right" sortDirection={sortBy === 'work_days' ? sortOrder : false}>
                     <TableSortLabel
                       active={sortBy === 'work_days'}
@@ -1116,6 +1163,20 @@ const AdminPage = () => {
                           </Box>
                         </TableCell>
 
+                        {/* Warehouse cell — только для суперадмина */}
+                        {isSuperAdmin && (
+                          <TableCell>
+                            <Box>
+                              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
+                                <HighlightText text={emp.warehouse_code || ''} query={search} />
+                              </Typography>
+                              <Typography sx={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                <HighlightText text={emp.warehouse_name || ''} query={search} />
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                        )}
+
                         <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)' }}>
                           {emp.work_days}
                         </TableCell>
@@ -1147,7 +1208,7 @@ const AdminPage = () => {
 
                       {/* Expanded row */}
                       <TableRow>
-                        <TableCell colSpan={6} sx={{ p: 0, border: 'none' }}>
+                        <TableCell colSpan={isSuperAdmin ? 7 : 6} sx={{ p: 0, border: 'none' }}>
                           <Collapse in={isExpanded} timeout={250} unmountOnExit>
                             <Box
                               sx={{

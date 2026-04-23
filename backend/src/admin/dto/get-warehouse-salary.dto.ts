@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsInt } from 'class-validator';
+import { IsDateString, IsOptional, IsInt, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetWarehouseSalaryDto {
@@ -17,5 +17,9 @@ export class GetWarehouseSalaryDto {
   @IsInt()
   @IsOptional()
   employeeId?: number;
+
+  @IsString()
+  @IsOptional()
+  section?: string;
 }
 

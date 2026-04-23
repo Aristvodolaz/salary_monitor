@@ -84,8 +84,8 @@ export const operationsAPI = {
 export const adminAPI = {
   getEmployees: (warehouseId?: number) =>
     api.get('/admin/employees', { params: { warehouseId } }),
-  getWarehouseSalary: (startDate: string, endDate: string, warehouseId?: number) =>
-    api.get('/admin/salary', { params: { startDate, endDate, warehouseId } }),
+  getWarehouseSalary: (startDate: string, endDate: string, warehouseId?: number, section?: string) =>
+    api.get('/admin/salary', { params: { startDate, endDate, warehouseId, section } }),
   exportSalary: (startDate: string, endDate: string, warehouseId?: number) =>
     api.get('/admin/export', { params: { startDate, endDate, warehouseId }, responseType: 'blob' }),
   getStats: (params?: { warehouseId?: number; startDate?: string; endDate?: string }) =>
@@ -149,6 +149,8 @@ export const normsAPI = {
     api.get('/norms/employees', { params: { startDate, endDate } }),
   getEmployeeDetail: (userId: number, startDate: string, endDate: string) =>
     api.get(`/norms/employees/${userId}/detail`, { params: { startDate, endDate } }),
+  getExportRows: (startDate: string, endDate: string) =>
+    api.get('/norms/employees/export', { params: { startDate, endDate } }),
   saveEmployeesSnapshot: (body: { startDate: string; endDate: string }) =>
     api.post('/norms/employees/snapshot', body),
 };

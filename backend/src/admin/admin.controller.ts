@@ -18,7 +18,7 @@ import { GetWarehouseSalaryDto } from './dto/get-warehouse-salary.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles('admin', 'superadmin')
 export class AdminController {
   constructor(private adminService: AdminService) {}
 
@@ -38,14 +38,15 @@ export class AdminController {
   /**
    * GET /api/admin/salary
    * Получить зарплаты всех сотрудников склада за период
+   * section: 'picking' | 'receiving' | undefined (все)
    */
   @Get('salary')
   async getWarehouseSalary(
     @CurrentUser() user: any,
     @Query() query: GetWarehouseSalaryDto,
   ) {
-    const { startDate, endDate, warehouseId } = query;
-    return this.adminService.getWarehouseSalary(user, startDate, endDate, warehouseId);
+    const { startDate, endDate, warehouseId, section } = query;
+    return this.adminService.getWarehouseSalary(user, startDate, endDate, warehouseId, section);
   }
 
   /**

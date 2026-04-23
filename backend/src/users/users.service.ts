@@ -24,7 +24,7 @@ export class UsersService {
         w.code as warehouse_code,
         w.name as warehouse_name
       FROM users u
-      INNER JOIN warehouses w ON u.warehouse_id = w.id
+      LEFT JOIN warehouses w ON u.warehouse_id = w.id
       WHERE u.employee_id = @employeeId
     `;
 
@@ -46,7 +46,7 @@ export class UsersService {
         w.code as warehouse_code,
         w.name as warehouse_name
       FROM users u
-      INNER JOIN warehouses w ON u.warehouse_id = w.id
+      LEFT JOIN warehouses w ON u.warehouse_id = w.id
       WHERE u.id = @id
     `;
 

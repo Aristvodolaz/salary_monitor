@@ -305,7 +305,8 @@ const NormsPage = () => {
   return (
     <Box sx={{ pb: { xs: '56px', md: 0 } }}>
       <PageHeader
-        title="Приемка и Хранение"
+        title="Нормативы: АЕИ и комплектация"
+        subtitle="Приёмка, хранение (блок АЕИ) и комплектация по всем зонам (ФС, МС, М2–М5 и т.д.)"
       />
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}

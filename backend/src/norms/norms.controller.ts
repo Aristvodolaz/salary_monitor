@@ -138,6 +138,20 @@ export class NormsController {
   }
 
   /**
+   * GET /api/norms/employees/export?startDate=&endDate=
+   * Полная выгрузка: все сотрудники × все WCR-коды (Блок 1 + Блок 2), JSON.
+   * Фронтенд конвертирует в CSV.
+   */
+  @Get('employees/export')
+  async getEmployeesExport(
+    @CurrentUser() user: any,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.normsService.getFullExportRows(user.warehouseId, startDate, endDate);
+  }
+
+  /**
    * GET /api/norms/employees/:id/detail?startDate=&endDate=
    * Детализация по сотруднику: АЕИ-операции и picking-операции раздельно
    */
