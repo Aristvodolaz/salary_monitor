@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import * as sql from 'mssql';
 import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../common/logger/logger.service';
 
@@ -29,8 +30,12 @@ export class UsersService {
     const input = (employeeId || '').trim();
     if (!input) return null;
 
-    const fromSap = await this.findInSapEmployees(input);
-    if (fromSap) return fromSap;
+    try {
+      const fromSap = await this.findInSapEmployees(input);
+      if (fromSap) return fromSap;
+    } catch (err) {
+      this.logger.error(`sap_employees недоступен при входе: ${err.message}`);
+    }
 
     return this.findInUsersTable(input);
   }
@@ -134,7 +139,7 @@ export class UsersService {
     const padded = this.padEmployeeId(input);
     const stripped = this.normalizeId(input);
 
-    const sapRows = await this.db.query<any>(
+    const sapRows = await this.queryNvarchar<any>(
       `SELECT
          e.personnel_number,
          e.employee_name,
@@ -144,37 +149,49 @@ export class UsersService {
          w.code as warehouse_code,
          w.name as warehouse_name
        FROM sap_employees e
-       INNER JOIN warehouses w ON w.code = e.lgnum
-       WHERE e.is_active = 1
+       LEFT JOIN warehouses w ON LTRIM(RTRIM(w.code)) = LTRIM(RTRIM(e.lgnum))
+       WHERE (e.is_active = 1 OR e.is_active IS NULL)
          AND (
-           e.personnel_number = @input
-           OR e.personnel_number = @stripped
-           OR e.personnel_number = @padded
-           OR RIGHT(REPLICATE('0', 8) + LTRIM(e.personnel_number), 8) = @padded
+           LTRIM(RTRIM(e.personnel_number)) IN (@input, @stripped, @padded)
+           OR RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(e.personnel_number)), 8) = @padded
          )`,
       { input, stripped, padded },
     );
 
-    const emp = sapRows.find(
-      (e) => this.normalizeId(e.personnel_number) === stripped,
-    );
+    const emp =
+      sapRows.find((e) => this.normalizeId(e.personnel_number) === stripped && e.warehouse_id) ||
+      sapRows.find((e) => this.normalizeId(e.personnel_number) === stripped) ||
+      sapRows[0];
     if (!emp) return null;
+
+    let warehouseId = emp.warehouse_id;
+    let warehouseCode = emp.warehouse_code || emp.lgnum;
+    let warehouseName = emp.warehouse_name;
+    if (!warehouseId) {
+      const fallback = await this.db.queryOne<any>(
+        `SELECT TOP 1 id, code, name FROM warehouses WHERE is_active = 1 ORDER BY id`,
+      );
+      warehouseId = fallback?.id;
+      warehouseCode = fallback?.code || emp.lgnum;
+      warehouseName = fallback?.name || emp.lgnum;
+    }
+    if (!warehouseId) return null;
 
     const userRow = await this.ensureUserRow(
       emp.personnel_number,
       emp.employee_name,
-      emp.warehouse_id,
+      warehouseId,
     );
 
     return this.toPublicUser({
       id: userRow.id,
       employee_id: emp.personnel_number,
       fio: emp.employee_name,
-      warehouse_id: emp.warehouse_id,
+      warehouse_id: warehouseId,
       role: userRow.role,
-      is_active: emp.is_active && userRow.is_active,
-      warehouse_code: emp.warehouse_code,
-      warehouse_name: emp.warehouse_name,
+      is_active: emp.is_active !== false && emp.is_active !== 0 && userRow.is_active,
+      warehouse_code: warehouseCode,
+      warehouse_name: warehouseName,
     });
   }
 
@@ -182,7 +199,7 @@ export class UsersService {
     const padded = this.padEmployeeId(input);
     const stripped = this.normalizeId(input);
 
-    const users = await this.db.query<any>(
+    const users = await this.queryNvarchar<any>(
       `SELECT
          u.id,
          u.employee_id,
@@ -193,7 +210,10 @@ export class UsersService {
          w.code as warehouse_code,
          w.name as warehouse_name
        FROM users u
-       INNER JOIN warehouses w ON u.warehouse_id = w.id`,
+       LEFT JOIN warehouses w ON u.warehouse_id = w.id
+       WHERE LTRIM(RTRIM(u.employee_id)) IN (@input, @stripped, @padded)
+          OR RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(u.employee_id)), 8) = @padded`,
+      { input, stripped, padded },
     );
 
     const user = users.find(
@@ -224,18 +244,27 @@ export class UsersService {
 
   /** Нужен users.id для JWT и operations.user_id. */
   private async ensureUserRow(personnelNumber: string, fio: string, warehouseId: number) {
-    const users = await this.db.query<any>(`SELECT id, employee_id, role, is_active FROM users`);
-    const existing = users.find(
-      (u) => this.normalizeId(u.employee_id) === this.normalizeId(personnelNumber),
+    const padded = this.padEmployeeId(personnelNumber);
+    const stripped = this.normalizeId(personnelNumber);
+    const existingRows = await this.queryNvarchar<any>(
+      `SELECT id, employee_id, role, is_active FROM users
+       WHERE LTRIM(RTRIM(employee_id)) IN (@input, @stripped, @padded)
+          OR RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(employee_id)), 8) = @padded`,
+      { input: String(personnelNumber).trim(), stripped, padded },
+    );
+    const existing = existingRows.find(
+      (u) => this.normalizeId(u.employee_id) === stripped,
     );
     if (existing) return existing;
 
-    const employeeId = this.padEmployeeId(personnelNumber);
     try {
-      await this.db.execute(
+      const request = this.db.getPool().request();
+      request.input('employeeId', sql.NVarChar(50), padded);
+      request.input('fio', sql.NVarChar(255), fio);
+      request.input('warehouseId', sql.Int, warehouseId);
+      await request.query(
         `INSERT INTO users (employee_id, fio, warehouse_id, role, is_active)
          VALUES (@employeeId, @fio, @warehouseId, 'employee', 1)`,
-        { employeeId, fio, warehouseId },
       );
     } catch (err) {
       if (!String(err.message).includes('UNIQUE') && !String(err.message).includes('duplicate')) {
@@ -243,11 +272,25 @@ export class UsersService {
       }
     }
 
-    const created = await this.db.queryOne<any>(
-      `SELECT id, employee_id, role, is_active FROM users WHERE employee_id = @employeeId`,
-      { employeeId },
+    const created = await this.queryNvarchar<any>(
+      `SELECT id, employee_id, role, is_active FROM users
+       WHERE LTRIM(RTRIM(employee_id)) IN (@input, @stripped, @padded)`,
+      { input: padded, stripped, padded },
     );
-    return created || { id: 0, role: 'employee', is_active: true };
+    return created[0] || { id: 0, role: 'employee', is_active: true };
+  }
+
+  /** Логин-номера всегда строка: иначе mssql шлёт 100029 как INT и сравнение с NVARCHAR ломается. */
+  private async queryNvarchar<T = any>(
+    queryText: string,
+    strings: Record<string, string>,
+  ): Promise<T[]> {
+    const request = this.db.getPool().request();
+    for (const [key, value] of Object.entries(strings)) {
+      request.input(key, sql.NVarChar(50), value);
+    }
+    const result = await request.query(queryText);
+    return result.recordset as T[];
   }
 
   private toPublicUser(row: any) {
