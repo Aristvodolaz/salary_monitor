@@ -1,12 +1,9 @@
 /**
  * Полная перезагрузка операций за последние 3 календарных месяца.
  *
- * Перед запуском в SSMS: database/migrations/015_add_sap_employees.sql
- *
  *   cd /home/admin-lc/salary_monitor/backend
+ *   npx tsc -p tsconfig.json
  *   node scripts/reload-3months.js
- *
- * Идёт несколько часов. Не прерывать.
  */
 require('reflect-metadata');
 const fs = require('fs');
@@ -16,24 +13,33 @@ const { execSync } = require('child_process');
 const backendRoot = path.join(__dirname, '..');
 process.chdir(backendRoot);
 
-function resolveDist(rel) {
-  const candidates = [
-    path.join(backendRoot, 'dist', rel),
-    path.join(backendRoot, 'dist', 'src', rel),
-  ];
-  return candidates.find((p) => fs.existsSync(p));
+function findInDist(fileName) {
+  const distDir = path.join(backendRoot, 'dist');
+  if (!fs.existsSync(distDir)) return null;
+  const stack = [distDir];
+  while (stack.length) {
+    const dir = stack.pop();
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) stack.push(full);
+      else if (ent.name === fileName) return full;
+    }
+  }
+  return null;
 }
 
-let appModulePath = resolveDist('app.module.js');
+let appModulePath = findInDist('app.module.js');
 if (!appModulePath) {
-  console.log('dist не найден — запускаю npm run build ...');
-  execSync('npm run build', { cwd: backendRoot, stdio: 'inherit' });
-  appModulePath = resolveDist('app.module.js');
+  console.log('app.module.js нет в dist — компилирую через tsc (без удаления dist)...');
+  execSync('npx tsc -p tsconfig.json', { cwd: backendRoot, stdio: 'inherit' });
+  appModulePath = findInDist('app.module.js');
 }
 
 if (!appModulePath) {
-  console.error('Не найден dist/app.module.js после сборки.');
-  console.error('Выполните вручную:');
+  console.error('Не найден dist/app.module.js.');
+  console.error('На сервере выполните по одной строке:');
+  console.error('  pm2 stop salary-monitor-backend');
+  console.error('  rm -rf /home/admin-lc/salary_monitor/backend/dist');
   console.error('  cd /home/admin-lc/salary_monitor/backend');
   console.error('  npm run build');
   console.error('  node scripts/reload-3months.js');
@@ -45,8 +51,7 @@ require('dotenv').config({ path: path.join(backendRoot, '.env') });
 async function main() {
   const { NestFactory } = require('@nestjs/core');
   const { AppModule } = require(appModulePath);
-  const servicePath =
-    resolveDist(path.join('sap-integration', 'sap-integration.service.js'));
+  const servicePath = findInDist('sap-integration.service.js');
   const { SapIntegrationService } = require(servicePath);
 
   const now = new Date();

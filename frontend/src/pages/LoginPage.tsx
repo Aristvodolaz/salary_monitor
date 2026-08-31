@@ -198,7 +198,7 @@ const LoginPage = () => {
             Вход в систему
           </Typography>
           <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)', mb: 3 }}>
-            Введите или отсканируйте ШК сотрудника
+            Введите табельный номер сотрудника
           </Typography>
 
           {error && (
@@ -210,7 +210,7 @@ const LoginPage = () => {
           <form onSubmit={handleLogin}>
             <TextField
               fullWidth
-              label="ШК сотрудника"
+              label="Табельный номер"
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
               autoFocus
