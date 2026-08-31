@@ -69,4 +69,19 @@ export class SapIntegrationController {
       period: { start: body.start, end: body.end, days: Math.ceil(diffDays) },
     };
   }
+
+  /**
+   * POST /api/sap/sync-employees
+   * Обновление справочника сотрудников из z_employee
+   */
+  @Post('sync-employees')
+  @HttpCode(HttpStatus.OK)
+  async syncEmployees() {
+    const result = await this.sapSchedulerService.manualSyncEmployees();
+    return {
+      success: true,
+      message: 'Справочник сотрудников обновлён',
+      ...result,
+    };
+  }
 }

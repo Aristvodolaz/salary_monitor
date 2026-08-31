@@ -23,7 +23,13 @@ export class SapSchedulerService {
     this.logger.log('🕐 [SapScheduler] Запуск ежедневной синхронизации с SAP');
 
     try {
-      // syncYesterday() — только вчера, динамически вычисляет даты
+      try {
+        await this.sapIntegrationService.syncEmployees();
+      } catch (empErr) {
+        this.logger.error(
+          `⚠️  [SapScheduler] Справочник сотрудников не обновился: ${empErr.message}. Берём предыдущую версию.`,
+        );
+      }
       await this.sapIntegrationService.syncYesterday();
 
       const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
@@ -52,6 +58,7 @@ export class SapSchedulerService {
    */
   async manualSync(): Promise<void> {
     this.logger.log('🔄 [SapScheduler] Ручная синхронизация (вчера)');
+    await this.sapIntegrationService.syncEmployees();
     await this.sapIntegrationService.syncYesterday();
   }
 
@@ -64,6 +71,12 @@ export class SapSchedulerService {
     this.logger.log(
       `🔄 [SapScheduler] Ручной sync периода: ${start.toISOString().slice(0, 10)} — ${end.toISOString().slice(0, 10)}`,
     );
+    await this.sapIntegrationService.syncEmployees();
     await this.sapIntegrationService.syncPeriod(start, end);
+  }
+
+  async manualSyncEmployees(): Promise<{ fetched: number; upserted: number }> {
+    this.logger.log('🔄 [SapScheduler] Синхронизация справочника сотрудников');
+    return this.sapIntegrationService.syncEmployees();
   }
 }
