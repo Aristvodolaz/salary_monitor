@@ -1,13 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { LoggerService } from '../common/logger/logger.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class OperationsService {
   constructor(
     private db: DatabaseService,
-    private logger: LoggerService,
+    private usersService: UsersService,
   ) {}
+
+  private async userIdFilter(userId: number, employeeId?: string) {
+    const ids = await this.usersService.findMatchingUserIds(employeeId, userId);
+    return this.usersService.toUserIdIn(ids);
+  }
 
   /**
    * Получить операции пользователя за период
@@ -20,6 +25,7 @@ export class OperationsService {
     offset: number = 0,
     sortBy: string = 'operation_date',
     sortOrder: string = 'desc',
+    employeeId?: string,
   ) {
     const sortColumns: Record<string, string> = {
       operation_id: 'operation_id',
@@ -37,8 +43,10 @@ export class OperationsService {
     const safeSortColumn = sortColumns[sortBy] || 'operation_date';
     const safeSortDirection = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
+    const { sql: inSql, params: inParams } = await this.userIdFilter(userId, employeeId);
+
     let query = `
-      SELECT 
+      SELECT
         operation_id,
         user_id,
         employee_id,
@@ -52,10 +60,10 @@ export class OperationsService {
         rate,
         base_amount
       FROM v_salary_details
-      WHERE user_id = @userId
+      WHERE user_id IN (${inSql})
     `;
 
-    const params: any = { userId };
+    const params: any = { ...inParams };
 
     if (startDate) {
       query += ' AND operation_date >= @startDate';
@@ -78,11 +86,10 @@ export class OperationsService {
 
     const operations = await this.db.query(query, params);
 
-    // Получить общее количество записей
     let countQuery = `
       SELECT COUNT(*) as total
       FROM operations
-      WHERE user_id = @userId
+      WHERE user_id IN (${inSql})
     `;
 
     if (startDate) {
@@ -93,7 +100,11 @@ export class OperationsService {
       countQuery += ' AND operation_date <= @endDate';
     }
 
-    const countResult = await this.db.queryOne(countQuery, { userId, startDate, endDate });
+    const countResult = await this.db.queryOne(countQuery, {
+      ...inParams,
+      startDate,
+      endDate,
+    });
 
     return {
       operations,
@@ -110,25 +121,26 @@ export class OperationsService {
    * Получить группированные операции по типам за период
    * Использует данные из v_salary_by_day для корректного учета коэффициента качества
    */
-  async getOperationsByType(userId: number, startDate?: string, endDate?: string) {
+  async getOperationsByType(userId: number, startDate?: string, endDate?: string, employeeId?: string) {
+    const { sql: inSql, params: inParams } = await this.userIdFilter(userId, employeeId);
     let query = `
-      SELECT 
+      SELECT
         sd.operation_type,
         COUNT(DISTINCT sd.operation_id) as operations_count,
         SUM(sd.aei_count) as total_aei,
         SUM(sd.base_amount) as base_amount,
-        SUM(CASE 
+        SUM(CASE
           WHEN sbd.base_amount > 0 THEN sbd.total_amount * (sd.base_amount / sbd.base_amount)
           ELSE sd.base_amount
         END) as total_amount
       FROM v_salary_details sd
-      INNER JOIN v_salary_by_day sbd ON 
-        sd.user_id = sbd.user_id 
+      INNER JOIN v_salary_by_day sbd ON
+        sd.user_id = sbd.user_id
         AND CAST(sd.operation_date AS DATE) = sbd.date
-      WHERE sd.user_id = @userId
+      WHERE sd.user_id IN (${inSql})
     `;
 
-    const params: any = { userId };
+    const params: any = { ...inParams };
 
     if (startDate) {
       query += ' AND sd.operation_date >= @startDate';
@@ -148,4 +160,3 @@ export class OperationsService {
     return this.db.query(query, params);
   }
 }
-

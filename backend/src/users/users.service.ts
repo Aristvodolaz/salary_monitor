@@ -41,6 +41,60 @@ export class UsersService {
   }
 
   /**
+   * Все users.id с тем же табельным: 100029, 000100029 и sap_employees.personnel_number / rsrc.
+   * Нужно, чтобы заработок нашёл операции, привязанные к дублю users (паддинг / старый ШК).
+   */
+  async findMatchingUserIds(personnelNumber?: string, extraUserId?: number): Promise<number[]> {
+    const ids = new Set<number>();
+    if (Number.isInteger(extraUserId) && extraUserId > 0) ids.add(extraUserId);
+
+    const input = (personnelNumber || '').trim();
+    if (!input) return [...ids];
+
+    const padded = this.padEmployeeId(input);
+    const stripped = this.normalizeId(input);
+    const rows = await this.queryNvarchar<{ id: number }>(
+      `SELECT DISTINCT u.id
+       FROM users u
+       WHERE LTRIM(RTRIM(u.employee_id)) IN (@input, @stripped, @padded)
+          OR RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(u.employee_id)), 8) = @padded
+          OR EXISTS (
+            SELECT 1 FROM sap_employees e
+            WHERE (e.is_active = 1 OR e.is_active IS NULL)
+              AND (
+                LTRIM(RTRIM(e.personnel_number)) IN (@input, @stripped, @padded)
+                OR RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(e.personnel_number)), 8) = @padded
+              )
+              AND (
+                RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(u.employee_id)), 8)
+                  = RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(e.personnel_number)), 8)
+                OR LTRIM(RTRIM(u.employee_id)) = LTRIM(RTRIM(e.rsrc))
+                OR LTRIM(RTRIM(u.employee_id)) = LTRIM(RTRIM(e.personnel_number))
+              )
+          )`,
+      { input, stripped, padded },
+    );
+    for (const row of rows) {
+      if (row?.id > 0) ids.add(row.id);
+    }
+    return [...ids];
+  }
+
+  /** Плейсхолдеры для WHERE user_id IN (...) — только целые id из БД. */
+  toUserIdIn(ids: number[]): { sql: string; params: Record<string, number> } {
+    const safe = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+    if (safe.length === 0) return { sql: 'NULL', params: {} };
+    const params: Record<string, number> = {};
+    const sqlFrag = safe
+      .map((id, i) => {
+        params[`pUserId${i}`] = id;
+        return `@pUserId${i}`;
+      })
+      .join(', ');
+    return { sql: sqlFrag, params };
+  }
+
+  /**
    * Найти пользователя по ID (JWT /me)
    */
   async findById(id: number) {
@@ -55,7 +109,7 @@ export class UsersService {
          w.code as warehouse_code,
          w.name as warehouse_name
        FROM users u
-       INNER JOIN warehouses w ON u.warehouse_id = w.id
+       LEFT JOIN warehouses w ON u.warehouse_id = w.id
        WHERE u.id = @id`,
       { id },
     );
@@ -252,10 +306,14 @@ export class UsersService {
           OR RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(employee_id)), 8) = @padded`,
       { input: String(personnelNumber).trim(), stripped, padded },
     );
-    const existing = existingRows.find(
+    const matches = existingRows.filter(
       (u) => this.normalizeId(u.employee_id) === stripped,
     );
-    if (existing) return existing;
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      const preferred = await this.preferUserWithOperations(matches);
+      if (preferred) return preferred;
+    }
 
     try {
       const request = this.db.getPool().request();
@@ -278,6 +336,27 @@ export class UsersService {
       { input: padded, stripped, padded },
     );
     return created[0] || { id: 0, role: 'employee', is_active: true };
+  }
+
+  /** Если есть дубли 100029 / 000100029 — берём того, к кому уже привязаны операции. */
+  private async preferUserWithOperations(matches: { id: number; employee_id: string; role: string; is_active: boolean }[]) {
+    const ids = matches.map((m) => m.id).filter((id) => Number.isInteger(id) && id > 0);
+    if (ids.length === 0) return matches[0];
+
+    const request = this.db.getPool().request();
+    const placeholders = ids.map((id, i) => {
+      request.input(`id${i}`, sql.Int, id);
+      return `@id${i}`;
+    });
+    const result = await request.query(
+      `SELECT TOP 1 user_id
+       FROM operations
+       WHERE user_id IN (${placeholders.join(', ')})
+       GROUP BY user_id
+       ORDER BY COUNT(*) DESC`,
+    );
+    const bestId = result.recordset[0]?.user_id;
+    return matches.find((m) => m.id === bestId) || matches[0];
   }
 
   /** Логин-номера всегда строка: иначе mssql шлёт 100029 как INT и сравнение с NVARCHAR ломается. */
