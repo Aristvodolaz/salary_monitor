@@ -12,16 +12,13 @@ export class AuthService {
   ) {}
 
   /**
-   * Авторизация по штрих-коду (Employee ID)
-   * @param employeeId - штрих-код сотрудника из SAP
-   * @returns JWT токен и информация о пользователе
+   * Авторизация по табельному номеру из sap_employees
    */
   async loginByBarcode(employeeId: string) {
-    // Поиск пользователя по employee_id
     const user = await this.usersService.findByEmployeeId(employeeId);
 
     if (!user) {
-      this.logger.warn(`Попытка входа с несуществующим ШК: ${employeeId}`);
+      this.logger.warn(`Попытка входа с неизвестным табельным: ${employeeId}`);
       throw new UnauthorizedException('Пользователь не найден');
     }
 
@@ -30,7 +27,7 @@ export class AuthService {
       throw new UnauthorizedException('Пользователь заблокирован');
     }
 
-    this.logger.log(`Вход пользователя: ${user.fio} (${employeeId})`, 'AuthService');
+    this.logger.log(`Вход: ${user.fio} (${user.employeeId})`, 'AuthService');
 
     // Генерация JWT
     const payload = {

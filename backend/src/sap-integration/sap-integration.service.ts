@@ -152,8 +152,11 @@ export class SapIntegrationService {
     const syncStart = markRow!.mark;
     this.logger.log('👥 Синхронизация справочника сотрудников z_employee');
 
-    const fetched = await this.fetchAllSapEmployees();
-    this.logger.log(`   Получено из SAP: ${fetched.length} сотрудников`);
+    const fetchedRaw = await this.fetchAllSapEmployees();
+    const fetched = this.dedupeEmployees(fetchedRaw);
+    this.logger.log(
+      `   Получено из SAP: ${fetchedRaw.length}, уникальных (склад+табельный): ${fetched.length}`,
+    );
 
     const upserted = await this.upsertSapEmployees(fetched, syncStart);
     await this.deactivateMissingEmployees(syncStart);
@@ -899,15 +902,25 @@ export class SapIntegrationService {
     return rows;
   }
 
+  /** SAP может отдать одного человека дважды (разный Rsrc) — MERGE так нельзя. */
+  private dedupeEmployees(rows: SapEmployeeRow[]): SapEmployeeRow[] {
+    const map = new Map<string, SapEmployeeRow>();
+    for (const row of rows) {
+      map.set(`${row.lgnum}|${row.personnel_number}`, row);
+    }
+    return [...map.values()];
+  }
+
   private async upsertSapEmployees(rows: SapEmployeeRow[], _syncStart: Date): Promise<number> {
-    if (rows.length === 0) return 0;
+    const unique = this.dedupeEmployees(rows);
+    if (unique.length === 0) return 0;
 
     const pool = this.db.getPool();
     const CHUNK = 80;
     let upserted = 0;
 
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const chunk = rows.slice(i, i + CHUNK);
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      const chunk = unique.slice(i, i + CHUNK);
       const values = chunk.map((r) => {
         const lgnum = `N'${r.lgnum.replace(/'/g, "''")}'`;
         const rsrc = `N'${r.rsrc.replace(/'/g, "''")}'`;

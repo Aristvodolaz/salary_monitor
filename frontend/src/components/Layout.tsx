@@ -254,7 +254,7 @@ const Layout = () => {
                   fontFamily: 'var(--font-mono)',
                 }}
               >
-                ШК: {user.employeeId}
+                Таб. №: {user.employeeId}
               </Typography>
             </Box>
           </Box>
