@@ -133,13 +133,13 @@ export class SalaryService {
     const { sql: inSql, params: inParams } = await this.userIdFilter(userId, employeeId);
     const query = `
       SELECT
-        COUNT(DISTINCT CAST(operation_date AS DATE)) as total_work_days,
-        COUNT(DISTINCT operation_id) as total_operations,
-        SUM(aei_count) as total_aei,
-        SUM(base_amount) as total_earned,
-        AVG(base_amount) as avg_per_operation,
-        MAX(operation_date) as last_operation_date
-      FROM v_salary_details
+        COUNT(DISTINCT date) as total_work_days,
+        SUM(operations_count) as total_operations,
+        SUM(total_aei) as total_aei,
+        SUM(total_amount) as total_earned,
+        AVG(total_amount) as avg_per_day,
+        MAX(date) as last_operation_date
+      FROM v_salary_by_day
       WHERE user_id IN (${inSql})
     `;
 

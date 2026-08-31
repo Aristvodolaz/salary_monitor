@@ -14,30 +14,74 @@ import {
   Button,
   useMediaQuery,
   TableSortLabel,
+  LinearProgress,
+  Tooltip,
 } from '@mui/material';
-import { Search, FilterAltOff } from '@mui/icons-material';
-import { Refresh } from '@mui/icons-material';
+import { Search, FilterAltOff, Refresh } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
-import { operationsAPI } from '../services/api';
-import { format } from 'date-fns';
+import { operationsAPI, salaryAPI } from '../services/api';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { ru } from 'date-fns/locale';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import { PageHeader } from '../components/ui/PageHeader';
+import { StatCard } from '../components/ui/StatCard';
 import { SkeletonTable } from '../components/ui/SkeletonTable';
 import { EmptyState } from '../components/ui/EmptyState';
-// ── Operation Card (mobile view) ───────────────────────────────────────────────
-interface OperationCardProps {
-  op: {
-    operation_id: string | number;
-    operation_date: string;
-    operation_type: string;
-    aei_count: number;
-    rate: number;
-    base_amount: number;
-  };
+import { SkeletonCard } from '../components/ui/SkeletonCard';
+
+const monthStart = () => format(startOfMonth(new Date()), 'yyyy-MM-dd');
+const monthEnd = () => format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+interface OperationRow {
+  operation_id: string | number;
+  operation_date: string;
+  operation_type: string;
+  aei_count: number;
+  prod_count?: number;
+  is_picking?: boolean | number;
+  rate: number;
+  base_amount: number;
 }
 
-const OperationCard = ({ op }: OperationCardProps) => {
+interface PeriodSummary {
+  total_amount: number;
+  operations_count: number;
+  total_aei: number;
+}
+
+interface TypeShare {
+  operation_type: string;
+  total_amount: number;
+  operations_count: number;
+}
+
+const fmtMoney = (n: number) =>
+  Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Комплектация: задачи × ставка. Сортировка / АЕИ: АЕИ × ставка. */
+const earningFormula = (op: OperationRow): string | null => {
+  const rate = Number(op.rate || 0);
+  const prod = Number(op.prod_count || 0);
+  const aei = Number(op.aei_count || 0);
+  if (rate <= 0) return null;
+  if (isPickingOp(op)) {
+    return prod > 0 ? `${prod} шт × ${fmtMoney(rate)}` : null;
+  }
+  return aei > 0 ? `${aei} АЕИ × ${fmtMoney(rate)}` : null;
+};
+
+const isPickingOp = (op: OperationRow) => {
+  if (op.is_picking === 1 || op.is_picking === true) return true;
+  if (op.is_picking === 0 || op.is_picking === false) return false;
+  return /комплект/i.test(op.operation_type || '');
+};
+
+// ── Operation Card (mobile view) ───────────────────────────────────────────
+const OperationCard = ({ op }: { op: OperationRow }) => {
   const isLarge = (op.base_amount || 0) >= 10000;
+  const formula = earningFormula(op);
+  const picking = isPickingOp(op);
+  const prod = Number(op.prod_count || 0);
 
   return (
     <Box
@@ -55,7 +99,6 @@ const OperationCard = ({ op }: OperationCardProps) => {
         },
       }}
     >
-      {/* Header: date + operation ID */}
       <Box
         sx={{
           display: 'flex',
@@ -89,9 +132,7 @@ const OperationCard = ({ op }: OperationCardProps) => {
         </Typography>
       </Box>
 
-      {/* Body */}
       <Box sx={{ px: 1.5, pt: 1, pb: 1.25 }}>
-        {/* Operation type */}
         <Typography
           sx={{
             fontSize: '0.875rem',
@@ -104,11 +145,24 @@ const OperationCard = ({ op }: OperationCardProps) => {
           {op.operation_type}
         </Typography>
 
-        {/* Amount — prominent, full width */}
+        <Typography
+          sx={{
+            fontSize: '0.625rem',
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'var(--color-gold)',
+            mb: 0.5,
+          }}
+        >
+          Заработано
+        </Typography>
         <Box
           sx={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 1,
             backgroundColor: 'var(--color-gold-muted)',
             borderRadius: 1.5,
             px: 1.25,
@@ -122,10 +176,22 @@ const OperationCard = ({ op }: OperationCardProps) => {
           <CurrencyDisplay
             amount={op.base_amount || 0}
             variant={isLarge ? 'default' : 'compact'}
+            unit="К"
           />
+          {formula && (
+            <Typography
+              sx={{
+                fontSize: '0.6875rem',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--color-text-secondary)',
+                fontWeight: 500,
+              }}
+            >
+              {formula}
+            </Typography>
+          )}
         </Box>
 
-        {/* Footer: AEI + Rate chips */}
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Box
             sx={{
@@ -162,6 +228,43 @@ const OperationCard = ({ op }: OperationCardProps) => {
             </Typography>
           </Box>
 
+          {picking && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                backgroundColor: 'var(--color-bg-elevated)',
+                border: '1px solid var(--color-border-subtle)',
+                borderRadius: 1,
+                px: 1,
+                py: 0.375,
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: '0.625rem',
+                  color: 'var(--color-text-muted)',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                Задачи
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: '0.8125rem',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--color-text-secondary)',
+                  fontWeight: 600,
+                }}
+              >
+                {prod}
+              </Typography>
+            </Box>
+          )}
+
           <Box
             sx={{
               display: 'flex',
@@ -183,7 +286,7 @@ const OperationCard = ({ op }: OperationCardProps) => {
                 letterSpacing: '0.06em',
               }}
             >
-              Расц.
+              Расценка
             </Typography>
             <Typography
               sx={{
@@ -193,7 +296,9 @@ const OperationCard = ({ op }: OperationCardProps) => {
                 fontWeight: 600,
               }}
             >
-              <CurrencyDisplay amount={op.rate || 0} variant="compact" />
+              {picking
+                ? `${fmtMoney(op.rate || 0)} К / шт`
+                : `${fmtMoney(op.rate || 0)} К / АЕИ`}
             </Typography>
           </Box>
         </Box>
@@ -202,7 +307,6 @@ const OperationCard = ({ op }: OperationCardProps) => {
   );
 };
 
-// ── Skeleton Card (mobile loading) ─────────────────────────────────────────────
 const SkeletonOperationCards = () => (
   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
     {Array.from({ length: 8 }).map((_, i) => (
@@ -225,25 +329,116 @@ const SkeletonOperationCards = () => (
   </Box>
 );
 
-// ── Operations Page ────────────────────────────────────────────────────────────
+const TypeBreakdown = ({ rows, total }: { rows: TypeShare[]; total: number }) => {
+  if (!rows.length || total <= 0) return null;
+
+  return (
+    <Box
+      sx={{
+        backgroundColor: 'var(--color-bg-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 2,
+        p: 2,
+        height: '100%',
+      }}
+    >
+      <Typography
+        sx={{
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: 'var(--color-text-secondary)',
+          mb: 1.5,
+        }}
+      >
+        Из чего сложился заработок
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        {rows.map((row) => {
+          const share = total > 0 ? (row.total_amount / total) * 100 : 0;
+          return (
+            <Box key={row.operation_type}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
+                <Typography
+                  sx={{
+                    fontSize: '0.8125rem',
+                    color: 'var(--color-text-primary)',
+                    fontWeight: 600,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {row.operation_type}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: '0.8125rem',
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--color-gold)',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  {Number(row.total_amount || 0).toLocaleString('ru-RU', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{' '}
+                  К
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={Math.min(100, share)}
+                sx={{
+                  height: 6,
+                  borderRadius: 99,
+                  backgroundColor: 'var(--color-bg-elevated)',
+                  '& .MuiLinearProgress-bar': {
+                    backgroundColor: 'var(--color-gold)',
+                    borderRadius: 99,
+                  },
+                }}
+              />
+              <Typography sx={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', mt: 0.25 }}>
+                {row.operations_count} оп. · {share.toFixed(0)}%
+              </Typography>
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+};
+
 const OperationsPage = () => {
-  const [operations, setOperations] = useState<any[]>([]);
+  const [operations, setOperations] = useState<OperationRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [loading, setLoading] = useState(true);
+  const [summaryLoading, setSummaryLoading] = useState(true);
   const [error, setError] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(monthStart);
+  const [endDate, setEndDate] = useState(monthEnd);
+  const [appliedStart, setAppliedStart] = useState(monthStart);
+  const [appliedEnd, setAppliedEnd] = useState(monthEnd);
   const [sortBy, setSortBy] = useState('operation_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [summary, setSummary] = useState<PeriodSummary | null>(null);
+  const [byType, setByType] = useState<TypeShare[]>([]);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   useEffect(() => {
     loadOperations();
-  }, [page, rowsPerPage, sortBy, sortOrder]);
+  }, [page, rowsPerPage, sortBy, sortOrder, appliedStart, appliedEnd]);
+
+  useEffect(() => {
+    loadSummary();
+  }, [appliedStart, appliedEnd]);
 
   const loadOperations = async () => {
     setLoading(true);
@@ -251,8 +446,8 @@ const OperationsPage = () => {
 
     try {
       const response = await operationsAPI.getOperations({
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
+        startDate: appliedStart || undefined,
+        endDate: appliedEnd || undefined,
         limit: rowsPerPage,
         offset: page * rowsPerPage,
         sortBy,
@@ -268,19 +463,67 @@ const OperationsPage = () => {
     }
   };
 
+  const loadSummary = async () => {
+    setSummaryLoading(true);
+    try {
+      if (appliedStart && appliedEnd) {
+        const [salaryRes, typesRes] = await Promise.all([
+          salaryAPI.getSalary('custom', appliedStart, appliedEnd),
+          operationsAPI.getOperationsByType(appliedStart, appliedEnd),
+        ]);
+        setSummary(salaryRes.data.summary || salaryRes.data);
+        setByType(typesRes.data || []);
+      } else {
+        const [statsRes, typesRes] = await Promise.all([
+          salaryAPI.getStats(),
+          operationsAPI.getOperationsByType(),
+        ]);
+        setSummary({
+          total_amount: statsRes.data?.total_earned || 0,
+          operations_count: statsRes.data?.total_operations || 0,
+          total_aei: statsRes.data?.total_aei || 0,
+        });
+        setByType(typesRes.data || []);
+      }
+    } catch {
+      setSummary(null);
+      setByType([]);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
   const handleSearch = () => {
+    setAppliedStart(startDate);
+    setAppliedEnd(endDate);
     setPage(0);
-    loadOperations();
   };
 
   const handleClear = () => {
-    setStartDate('');
-    setEndDate('');
+    const start = monthStart();
+    const end = monthEnd();
+    setStartDate(start);
+    setEndDate(end);
+    setAppliedStart(start);
+    setAppliedEnd(end);
     setPage(0);
-    setTimeout(loadOperations, 0);
   };
 
-  const hasFilter = startDate || endDate;
+  const parseLocalDate = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  };
+
+  const hasFilter = Boolean(appliedStart || appliedEnd);
+  const periodLabel =
+    appliedStart && appliedEnd
+      ? `${format(parseLocalDate(appliedStart), 'd MMMM', { locale: ru })} — ${format(parseLocalDate(appliedEnd), 'd MMMM yyyy', { locale: ru })}`
+      : 'за всё время';
+
+  const typeRows = [...byType]
+    .filter((row) => (row.total_amount || 0) > 0)
+    .sort((a, b) => (b.total_amount || 0) - (a.total_amount || 0))
+    .slice(0, 5);
 
   const handleSort = (column: string) => {
     if (sortBy === column) {
@@ -293,9 +536,57 @@ const OperationsPage = () => {
 
   return (
     <Box>
-      <PageHeader title="Мои операции" />
+      <PageHeader
+        title="Мои операции"
+        subtitle="Комплектация: задачи × ставка. Сортировка и прочие АЕИ: АЕИ × ставка. Итог сверху — за выбранные дни, с коэффициентом качества."
+      />
 
-      {/* Filter bar — stacks on mobile */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: summaryLoading || typeRows.length > 0 ? '1.1fr 0.9fr' : '1fr',
+          },
+          gap: 2,
+          mb: 3,
+          alignItems: 'stretch',
+        }}
+      >
+        {summaryLoading ? (
+          <SkeletonCard />
+        ) : (
+          <Box>
+            <StatCard
+              label={`Заработано ${periodLabel}`}
+              variant="hero"
+              value={
+                <CurrencyDisplay
+                  amount={summary?.total_amount || 0}
+                  variant="large"
+                  unit="К"
+                />
+              }
+              subStats={[
+                { label: 'Операций', value: summary?.operations_count || 0 },
+                {
+                  label: 'АЕИ',
+                  value: Number(summary?.total_aei || 0).toLocaleString('ru-RU'),
+                },
+              ]}
+            />
+            <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', mt: 1, px: 0.5 }}>
+              Итог за календарные дни периода, с коэффициентом качества. Комплектация — задачи × ставка, сортировка — АЕИ × ставка.
+            </Typography>
+          </Box>
+        )}
+        {summaryLoading ? (
+          <SkeletonCard />
+        ) : (
+          <TypeBreakdown rows={typeRows} total={summary?.total_amount || 0} />
+        )}
+      </Box>
+
       <Box
         sx={{
           display: 'flex',
@@ -331,7 +622,7 @@ const OperationsPage = () => {
         />
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button variant="contained" size="small" startIcon={<Search />} onClick={handleSearch}>
-            Применить
+            Показать заработок
           </Button>
           {hasFilter && (
             <Button
@@ -340,7 +631,7 @@ const OperationsPage = () => {
               startIcon={<FilterAltOff />}
               onClick={handleClear}
             >
-              Сбросить
+              Этот месяц
             </Button>
           )}
         </Box>
@@ -350,7 +641,7 @@ const OperationsPage = () => {
             aria-live="polite"
             sx={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}
           >
-            {loading ? '...' : `Найдено: ${total}`}
+            {loading ? '...' : `Операций в списке: ${total}`}
           </Typography>
         </Box>
       </Box>
@@ -369,7 +660,6 @@ const OperationsPage = () => {
         </Alert>
       )}
 
-      {/* ── MOBILE: Card list ── */}
       {isMobile && (
         <>
           {loading ? (
@@ -381,7 +671,7 @@ const OperationsPage = () => {
               action={
                 hasFilter ? (
                   <Button variant="outlined" size="small" onClick={handleClear}>
-                    Сбросить фильтр
+                    Этот месяц
                   </Button>
                 ) : undefined
               }
@@ -396,7 +686,6 @@ const OperationsPage = () => {
         </>
       )}
 
-      {/* ── DESKTOP: Table ── */}
       {!isMobile && (
         <Box
           sx={{
@@ -415,17 +704,20 @@ const OperationsPage = () => {
               action={
                 hasFilter ? (
                   <Button variant="outlined" size="small" onClick={handleClear}>
-                    Сбросить фильтр
+                    Этот месяц
                   </Button>
                 ) : undefined
               }
             />
           ) : (
-            <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
-              <Table stickyHeader>
+            <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
+              <Table stickyHeader sx={{ tableLayout: 'fixed' }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell sortDirection={sortBy === 'operation_date' ? sortOrder : false}>
+                    <TableCell
+                      sortDirection={sortBy === 'operation_date' ? sortOrder : false}
+                      sx={{ width: 150 }}
+                    >
                       <TableSortLabel
                         active={sortBy === 'operation_date'}
                         direction={sortBy === 'operation_date' ? sortOrder : 'asc'}
@@ -443,7 +735,11 @@ const OperationsPage = () => {
                         Операция
                       </TableSortLabel>
                     </TableCell>
-                    <TableCell align="right" sortDirection={sortBy === 'aei_count' ? sortOrder : false}>
+                    <TableCell
+                      align="right"
+                      sortDirection={sortBy === 'aei_count' ? sortOrder : false}
+                      sx={{ width: 72 }}
+                    >
                       <TableSortLabel
                         active={sortBy === 'aei_count'}
                         direction={sortBy === 'aei_count' ? sortOrder : 'asc'}
@@ -452,7 +748,14 @@ const OperationsPage = () => {
                         АЕИ
                       </TableSortLabel>
                     </TableCell>
-                    <TableCell align="right" sortDirection={sortBy === 'rate' ? sortOrder : false}>
+                    <TableCell align="right" sx={{ width: 80 }}>
+                      Задачи
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sortDirection={sortBy === 'rate' ? sortOrder : false}
+                      sx={{ width: 130 }}
+                    >
                       <TableSortLabel
                         active={sortBy === 'rate'}
                         direction={sortBy === 'rate' ? sortOrder : 'asc'}
@@ -464,15 +767,17 @@ const OperationsPage = () => {
                     <TableCell
                       align="right"
                       sortDirection={sortBy === 'base_amount' ? sortOrder : false}
-                      sx={{ color: 'var(--color-gold) !important' }}
+                      sx={{ width: 180, color: 'var(--color-gold) !important' }}
                     >
-                      <TableSortLabel
-                        active={sortBy === 'base_amount'}
-                        direction={sortBy === 'base_amount' ? sortOrder : 'asc'}
-                        onClick={() => handleSort('base_amount')}
-                      >
-                        Сумма
-                      </TableSortLabel>
+                      <Tooltip title="Комплектация: задачи × ставка. Сортировка: АЕИ × ставка.">
+                        <TableSortLabel
+                          active={sortBy === 'base_amount'}
+                          direction={sortBy === 'base_amount' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('base_amount')}
+                        >
+                          Заработано
+                        </TableSortLabel>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 </TableHead>
@@ -488,29 +793,48 @@ const OperationsPage = () => {
                       <TableCell sx={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem' }}>
                         {format(new Date(op.operation_date), 'dd.MM.yyyy HH:mm')}
                       </TableCell>
-                      <TableCell>{op.operation_type}</TableCell>
+                      <TableCell sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {op.operation_type}
+                      </TableCell>
                       <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)' }}>
                         {op.aei_count}
                       </TableCell>
-                      <TableCell align="right">
-                        <CurrencyDisplay amount={op.rate || 0} variant="compact" />
+                      <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)' }}>
+                        {Number(op.prod_count || 0) || '—'}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>
+                        {fmtMoney(op.rate || 0)}{' '}
+                        {isPickingOp(op) ? 'К/шт' : 'К/АЕИ'}
                       </TableCell>
                       <TableCell align="right">
                         <Box
-                          component="span"
                           sx={{
+                            display: 'inline-flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
                             color: 'var(--color-gold)',
                             fontWeight: 700,
                             fontFamily: 'var(--font-mono)',
-                            fontSize: '0.9375rem',
-                            px: 1.5,
+                            px: 1.25,
                             py: 0.5,
                             borderRadius: 1,
                             backgroundColor: 'var(--color-gold-muted)',
-                            display: 'inline-block',
                           }}
                         >
-                          <CurrencyDisplay amount={op.base_amount || 0} variant="compact" />
+                          <CurrencyDisplay amount={op.base_amount || 0} variant="compact" unit="К" />
+                          {earningFormula(op) && (
+                            <Typography
+                              sx={{
+                                fontSize: '0.6875rem',
+                                fontWeight: 500,
+                                color: 'var(--color-text-secondary)',
+                                lineHeight: 1.2,
+                                mt: 0.25,
+                              }}
+                            >
+                              {earningFormula(op)}
+                            </Typography>
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -522,17 +846,34 @@ const OperationsPage = () => {
         </Box>
       )}
 
-      {/* Pagination — shared between both views */}
       {!loading && operations.length > 0 && (
         <Box
           sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 1,
             backgroundColor: 'var(--color-bg-surface)',
             border: '1px solid var(--color-border)',
             borderRadius: isMobile ? 2 : '0 0 8px 8px',
             mt: isMobile ? 1 : 0,
             borderTop: isMobile ? undefined : 'none',
+            px: 2,
           }}
         >
+          <Typography
+            sx={{
+              fontSize: '0.875rem',
+              fontWeight: 700,
+              color: 'var(--color-gold)',
+              fontFamily: 'var(--font-mono)',
+              py: 1,
+            }}
+          >
+            Итого за период:{' '}
+            <CurrencyDisplay amount={summary?.total_amount || 0} variant="compact" unit="К" />
+          </Typography>
           <TablePagination
             component="div"
             count={total}
@@ -545,7 +886,7 @@ const OperationsPage = () => {
             }}
             labelRowsPerPage={isMobile ? '' : 'Строк:'}
             rowsPerPageOptions={isMobile ? [10, 25] : [10, 25, 50]}
-            sx={{ color: 'var(--color-text-secondary)' }}
+            sx={{ color: 'var(--color-text-secondary)', border: 0 }}
           />
         </Box>
       )}

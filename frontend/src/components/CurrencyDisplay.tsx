@@ -6,6 +6,10 @@ interface CurrencyDisplayProps {
   amount: number;
   decimals?: number;
   variant?: 'default' | 'inline' | 'large' | 'compact';
+  /** Красный значок «К». На расценке лучше выключить — иначе не отличить от заработка. */
+  showBadge?: boolean;
+  /** Текстовая единица после числа, например «К». */
+  unit?: string;
 }
 
 interface CoinBadgeProps {
@@ -53,19 +57,32 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
   amount,
   decimals = 2,
   variant = 'default',
+  showBadge = true,
+  unit,
 }) => {
   const formattedAmount = amount.toLocaleString('ru-RU', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+  const label = `${formattedAmount}${unit ? ` ${unit}` : ''}`;
+
+  const unitSx = {
+    ml: 0.5,
+    fontSize: '0.7em',
+    fontWeight: 700,
+    opacity: 0.72,
+    letterSpacing: '0.04em',
+  } as const;
 
   if (variant === 'large') {
     return (
       <Box
         component="span"
+        title={unit ? `${label} (комиссионные)` : label}
+        aria-label={unit ? `${label} комиссионных` : label}
         sx={{
           display: 'inline-flex',
-          alignItems: 'center',
+          alignItems: 'baseline',
           fontFamily: 'var(--font-mono)',
           fontSize: '2rem',
           fontWeight: 700,
@@ -73,8 +90,9 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
           letterSpacing: '-0.01em',
         }}
       >
-        <CoinBadge size="lg" />
+        {showBadge && <CoinBadge size="lg" />}
         {formattedAmount}
+        {unit && <Box component="span" sx={unitSx}>{unit}</Box>}
       </Box>
     );
   }
@@ -83,33 +101,38 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
     return (
       <Box
         component="span"
+        title={unit ? `${label} (комиссионные)` : label}
+        aria-label={unit ? `${label} комиссионных` : label}
         sx={{
           display: 'inline-flex',
-          alignItems: 'center',
+          alignItems: 'baseline',
           fontFamily: 'var(--font-mono)',
           fontSize: '0.875rem',
           fontWeight: 500,
         }}
       >
-        <CoinBadge size="sm" />
+        {showBadge && <CoinBadge size="sm" />}
         {formattedAmount}
+        {unit && <Box component="span" sx={unitSx}>{unit}</Box>}
       </Box>
     );
   }
 
-  // default | inline
   return (
     <Box
       component="span"
+      title={unit ? `${label} (комиссионные)` : label}
+      aria-label={unit ? `${label} комиссионных` : label}
       sx={{
         display: 'inline-flex',
-        alignItems: 'center',
+        alignItems: 'baseline',
         fontFamily: 'var(--font-mono)',
         fontWeight: 500,
       }}
     >
-      <CoinBadge size="md" />
+      {showBadge && <CoinBadge size="md" />}
       {formattedAmount}
+      {unit && <Box component="span" sx={unitSx}>{unit}</Box>}
     </Box>
   );
 };

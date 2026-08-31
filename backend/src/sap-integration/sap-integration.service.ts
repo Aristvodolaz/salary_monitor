@@ -23,6 +23,8 @@ interface SyncContext {
   wcrMap: Map<string, { operation_type: string; participant_area: string }>;
   /** wcr_code → norm_type (справочник wcr_norms — блок 1/АЕИ, без тарифа) */
   wcrNormsMap: Map<string, { normType: string }>;
+  /** wcr в wcr_picking_norms → комплектация: amount = prod_count × rate */
+  pickingNormMap: Map<string, number | null>;
 }
 
 interface ParsedOperation {
@@ -52,7 +54,7 @@ interface OperationRow {
   prodCount: number;   // продуктовые задачи (ZprodWtItm) — блок 2
   actdura: number;     // минуты
   operationDate: Date;
-  amount: number;      // count * rate = Вn × Рm
+  amount: number;      // комплектация: prod×ставка; сортировка/АЕИ: АЕИ×ставка
   sapOrderId: string | null;
   wcrCode: string | null;   // оригинальный WCR-код из SAP
   aarea: string | null;     // зона активности из SAP WHOSet.Aarea
@@ -333,9 +335,7 @@ export class SapIntegrationService {
     const operationType  = wcrEntry?.operation_type  ?? parsed.wcr;
     const participantArea = wcrEntry?.participant_area ?? '';
     const tariff         = ctx.tariffMap.get(operationType);
-    // Блок 2 (комплектация): тариф применяется к prod_count (ZprodWtItm). Коды вне wcr_mapping
-    // (блок 1 / АЕИ) не имеют тарифа в БД — amount = 0 (см. resolveOperation выше).
-    const amount         = wcrEntry ? parsed.prodCount * (tariff?.rate ?? 0) : 0;
+    const amount         = this.resolveAmount(parsed, ctx, tariff?.rate);
 
     return {
       userId,
@@ -467,13 +467,13 @@ export class SapIntegrationService {
             }
             operationType   = wcrEntry.operation_type;
             participantArea = wcrEntry.participant_area;
-            amount = parsed.prodCount * tariff.rate;
+            amount = this.resolveAmount(parsed, ctx, tariff.rate);
           } else {
             const normEntry = ctx.wcrNormsMap.get(parsed.wcr);
             if (!normEntry) { skippedNoWcr++; continue; }
             operationType   = normEntry.normType;
             participantArea = 'АЕИ';
-            amount = 0;
+            amount = this.resolveAmount(parsed, ctx, ctx.tariffMap.get(operationType)?.rate);
             savedAeiFallback++;
           }
 
@@ -530,7 +530,7 @@ export class SapIntegrationService {
   // ──────────────────────────────────────────────────────────────
 
   private async buildSyncContext(warehouseCode: string, referenceDate: Date): Promise<SyncContext> {
-    const [warehouseRow, users, employees, tariffs, wcrRows, wcrNormsRows] = await Promise.all([
+    const [warehouseRow, users, employees, tariffs, wcrRows, wcrNormsRows, pickingRows] = await Promise.all([
       this.db.queryOne<{ id: number }>(
         `SELECT id FROM warehouses WHERE code = @code`,
         { code: warehouseCode },
@@ -561,6 +561,9 @@ export class SapIntegrationService {
       ),
       this.db.query<{ wcr_code: string; norm_type: string }>(
         `SELECT wcr_code, norm_type FROM wcr_norms WHERE is_active = 1`,
+      ),
+      this.db.query<{ wcr_code: string; rate: number | null }>(
+        `SELECT wcr_code, rate FROM wcr_picking_norms WHERE is_active = 1`,
       ),
     ]);
 
@@ -608,6 +611,7 @@ export class SapIntegrationService {
       wcrNormsMap: new Map(
         wcrNormsRows.map((r) => [r.wcr_code, { normType: r.norm_type }]),
       ),
+      pickingNormMap: new Map(pickingRows.map((p) => [p.wcr_code, p.rate])),
     };
   }
 
@@ -655,6 +659,17 @@ export class SapIntegrationService {
       },
       { label, maxAttempts: 3 },
     );
+  }
+
+  /**
+   * Комплектация (wcr_picking_norms): задачи × ставка.
+   * Сортировка / АЕИ (приёмка, пополнение): АЕИ × ставка.
+   */
+  private resolveAmount(parsed: ParsedOperation, ctx: SyncContext, tariffRate?: number): number {
+    if (ctx.pickingNormMap.has(parsed.wcr)) {
+      return parsed.prodCount * (ctx.pickingNormMap.get(parsed.wcr) ?? 0);
+    }
+    return parsed.aeiCount * (tariffRate ?? 0);
   }
 
   // ──────────────────────────────────────────────────────────────
