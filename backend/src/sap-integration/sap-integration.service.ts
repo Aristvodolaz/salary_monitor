@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../common/logger/logger.service';
 import axios, { AxiosInstance } from 'axios';
-import * as sql from 'mssql';
 import * as http from 'http';
 import * as https from 'https';
 
@@ -14,16 +13,21 @@ import * as https from 'https';
 interface SyncContext {
   warehouseId: number;
   warehouseCode: string;
-  /** employee_id → user DB id */
+  /** ключи: personnel_number / ШК / нормализованный id → user DB id */
   userMap: Map<string, number>;
+  /** Rsrc (верхний регистр) → user DB id */
+  rsrcUserMap: Map<string, number>;
   /** operation_type → tariff */
   tariffMap: Map<string, { rate: number; norm_aei_per_hour: number | null }>;
   /** wcr_code → { operation_type, participant_area } */
   wcrMap: Map<string, { operation_type: string; participant_area: string }>;
+  /** wcr_code → norm_type (справочник wcr_norms — блок 1/АЕИ, без тарифа) */
+  wcrNormsMap: Map<string, { normType: string }>;
 }
 
 interface ParsedOperation {
   employeeId: string;
+  processor: string;
   employeeName1: string;
   employeeName2: string;
   warehouseCode: string;
@@ -63,9 +67,23 @@ interface DateChunk {
 // Сервис
 // ────────────────────────────────────────────────────────────────
 
+interface SapEmployeeRow {
+  lgnum: string;
+  rsrc: string;
+  personnel_number: string;
+  employee_name: string;
+  jobgr: string;
+  jobgr_text: string;
+}
+
+const DEFAULT_EMPLOYEE_ODATA_URL =
+  'http://pwm.komus.net/sap/opu/odata4/sap/z_employee/srvd_a2x/sap/z_employee/0001/Employee';
+
 @Injectable()
 export class SapIntegrationService {
   private axiosInstance: AxiosInstance;
+  private employeeAxios: AxiosInstance;
+  private employeeODataUrl: string;
   private readonly CHUNK_DAYS          = 1;
   private readonly WAREHOUSE_CONCURRENCY = 1;  // последовательная обработка складов, чтобы не упасть по памяти
   private readonly CHUNK_CONCURRENCY   = 1;    // последовательные чанки SAP
@@ -92,6 +110,19 @@ export class SapIntegrationService {
       httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 5 }),
       validateStatus: (status) => status < 500,
     });
+
+    this.employeeODataUrl =
+      this.configService.get<string>('SAP_EMPLOYEE_ODATA_URL') || DEFAULT_EMPLOYEE_ODATA_URL;
+    this.employeeAxios = axios.create({
+      auth: { username: sapUser, password: sapPass },
+      timeout: 120_000,
+      proxy: false,
+      headers: { Accept: 'application/json' },
+      httpAgent:  new http.Agent({ keepAlive: true, maxSockets: 5 }),
+      httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 5 }),
+      validateStatus: (status) => status < 500,
+    });
+    this.logger.log(`SAP employees URL: ${this.employeeODataUrl}`);
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -111,6 +142,41 @@ export class SapIntegrationService {
 
     this.logger.log(`📅 Ежедневный sync: ${yestStart.toISOString().slice(0, 10)}`);
     await this.syncAllWarehouses(yestStart, yestEnd);
+  }
+
+  /**
+   * Полная выгрузка справочника сотрудников из z_employee (OData4) + upsert users.
+   */
+  async syncEmployees(): Promise<{ fetched: number; upserted: number }> {
+    const markRow = await this.db.queryOne<{ mark: Date }>(`SELECT GETDATE() AS mark`);
+    const syncStart = markRow!.mark;
+    this.logger.log('👥 Синхронизация справочника сотрудников z_employee');
+
+    const fetched = await this.fetchAllSapEmployees();
+    this.logger.log(`   Получено из SAP: ${fetched.length} сотрудников`);
+
+    const upserted = await this.upsertSapEmployees(fetched, syncStart);
+    await this.deactivateMissingEmployees(syncStart);
+    await this.upsertUsersFromEmployees();
+
+    this.logger.log(`✅ Справочник сотрудников обновлён: upsert=${upserted}`);
+    return { fetched: fetched.length, upserted };
+  }
+
+  /**
+   * Удаляет операции за последние 3 календарных месяца и загружает их заново
+   * уже с привязкой через sap_employees.
+   */
+  async reloadLast3Months(): Promise<void> {
+    const now   = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
+    const end   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+
+    this.logger.log(
+      `♻️  Полная перезагрузка ${start.toISOString().slice(0, 10)} — ${end.toISOString().slice(0, 10)}`,
+    );
+    await this.syncEmployees();
+    await this.syncAllWarehouses(start, end);
   }
 
   /**
@@ -223,45 +289,17 @@ export class SapIntegrationService {
         if (items.length === 0) continue;
 
         const operations: OperationRow[] = [];
-        const newUsers = new Map<string, { fio: string }>();
 
         for (const item of items) {
           const parsed = this.parseItem(item);
           if (!parsed) continue;
 
-          // ← ключевой фильтр: пропускаем не-нормативные WCR
           if (!normsSet.has(parsed.wcr)) { skipped++; continue; }
 
-          const userId = ctx.userMap.get(parsed.employeeId);
-          if (userId === undefined) {
-            if (!newUsers.has(parsed.employeeId)) {
-              const fio =
-                `${parsed.employeeName1} ${parsed.employeeName2}`.trim() ||
-                `Сотрудник ${parsed.employeeId}`;
-              newUsers.set(parsed.employeeId, { fio });
-            }
-            continue;
-          }
+          const userId = this.resolveUserId(ctx, parsed);
+          if (userId === undefined) { skipped++; continue; }
 
           operations.push(this.buildNormsRow(parsed, userId, warehouseCode, ctx));
-        }
-
-        // Создаём новых пользователей (если есть) и добавляем их записи
-        if (newUsers.size > 0) {
-          await this.createNewUsers(newUsers, ctx);
-          const fresh = await this.db.query<{ employee_id: string; id: number }>(
-            `SELECT id, employee_id FROM users WHERE warehouse_id = @wid`,
-            { wid: ctx.warehouseId },
-          );
-          fresh.forEach((u) => ctx.userMap.set(u.employee_id, u.id));
-
-          for (const item of items) {
-            const parsed = this.parseItem(item);
-            if (!parsed || !normsSet.has(parsed.wcr) || !newUsers.has(parsed.employeeId)) continue;
-            const userId2 = ctx.userMap.get(parsed.employeeId);
-            if (userId2 !== undefined)
-              operations.push(this.buildNormsRow(parsed, userId2, warehouseCode, ctx));
-          }
         }
 
         // Удаляем и вставляем заново
@@ -292,7 +330,9 @@ export class SapIntegrationService {
     const operationType  = wcrEntry?.operation_type  ?? parsed.wcr;
     const participantArea = wcrEntry?.participant_area ?? '';
     const tariff         = ctx.tariffMap.get(operationType);
-    const amount         = (participantArea === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * (tariff?.rate ?? 0);
+    // Блок 2 (комплектация): тариф применяется к prod_count (ZprodWtItm). Коды вне wcr_mapping
+    // (блок 1 / АЕИ) не имеют тарифа в БД — amount = 0 (см. resolveOperation выше).
+    const amount         = wcrEntry ? parsed.prodCount * (tariff?.rate ?? 0) : 0;
 
     return {
       userId,
@@ -361,7 +401,7 @@ export class SapIntegrationService {
       // Шаг 1: Preload всего необходимого (3 параллельных запроса)
       const ctx = await this.buildSyncContext(warehouseCode, periodStart);
       this.logger.log(
-        `   Контекст: ${ctx.userMap.size} юзеров, ` +
+        `   Контекст: ${ctx.userMap.size} ключей сотрудников, ` +
         `${ctx.tariffMap.size} тарифов, ${ctx.wcrMap.size} WCR`,
       );
 
@@ -376,6 +416,8 @@ export class SapIntegrationService {
       let skippedNoAei    = 0;
       let skippedNoWcr    = 0;
       let skippedNoTariff = 0;
+      let skippedNoEmployee = 0;
+      let savedAeiFallback = 0;
       const missingTariffs = new Map<string, number>();
 
       for (let i = 0; i < chunks.length; i++) {
@@ -398,97 +440,54 @@ export class SapIntegrationService {
         this.logger.log(`   📡 Получено ${items.length} записей`);
         if (items.length === 0) continue;
 
-        // Маппинг и новые юзеры
-        const newUsers = new Map<string, { fio: string }>();
+        // Привязка только через sap_employees (табельный / Rsrc), без создания users из WHOSet
         const operations: OperationRow[] = [];
-
-        const resolveOperation = (item: any): OperationRow | null => {
-          const parsed = this.parseItem(item);
-          if (!parsed) { skippedNoAei++; return null; }
-
-          const wcrEntry = ctx.wcrMap.get(parsed.wcr);
-          if (!wcrEntry) { skippedNoWcr++; return null; }
-
-          const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
-          if (!tariff) {
-            skippedNoTariff++;
-            missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
-            return null;
-          }
-
-          const userId = ctx.userMap.get(parsed.employeeId);
-          if (userId === undefined) return null;
-
-          return {
-            userId,
-            warehouseCode,
-            operationType:   wcrEntry.operation_type,
-            participantArea: wcrEntry.participant_area,
-            count:     parsed.aeiCount,
-            prodCount: parsed.prodCount,
-            actdura:   parsed.actdura,
-            operationDate: parsed.operationDate,
-            amount: (wcrEntry.participant_area === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * tariff.rate,
-            sapOrderId: parsed.sapOrderId,
-            wcrCode: parsed.wcr || null,
-            aarea:   parsed.aarea || null,
-          };
-        };
 
         for (const item of items) {
           const parsed = this.parseItem(item);
           if (!parsed) { skippedNoAei++; continue; }
 
+          const userId = this.resolveUserId(ctx, parsed);
+          if (userId === undefined) { skippedNoEmployee++; continue; }
+
           const wcrEntry = ctx.wcrMap.get(parsed.wcr);
-          if (!wcrEntry) { skippedNoWcr++; continue; }
+          let operationType: string;
+          let participantArea: string;
+          let amount: number;
 
-          const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
-          if (!tariff) {
-            skippedNoTariff++;
-            missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
-            continue;
-          }
-
-          const userId = ctx.userMap.get(parsed.employeeId);
-          if (userId === undefined) {
-            if (!newUsers.has(parsed.employeeId)) {
-              const fio = `${parsed.employeeName1} ${parsed.employeeName2}`.trim()
-                || `Сотрудник ${parsed.employeeId}`;
-              newUsers.set(parsed.employeeId, { fio });
+          if (wcrEntry) {
+            const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
+            if (!tariff) {
+              skippedNoTariff++;
+              missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
+              continue;
             }
-            continue;
+            operationType   = wcrEntry.operation_type;
+            participantArea = wcrEntry.participant_area;
+            amount = parsed.prodCount * tariff.rate;
+          } else {
+            const normEntry = ctx.wcrNormsMap.get(parsed.wcr);
+            if (!normEntry) { skippedNoWcr++; continue; }
+            operationType   = normEntry.normType;
+            participantArea = 'АЕИ';
+            amount = 0;
+            savedAeiFallback++;
           }
 
           operations.push({
             userId,
             warehouseCode,
-            operationType:   wcrEntry.operation_type,
-            participantArea: wcrEntry.participant_area,
+            operationType,
+            participantArea,
             count:           parsed.aeiCount,
             prodCount:       parsed.prodCount,
             actdura:         parsed.actdura,
             operationDate:   parsed.operationDate,
-            amount:          (wcrEntry.participant_area === 'Приемка и Хранение' ? parsed.prodCount : parsed.aeiCount) * tariff.rate,
+            amount,
             sapOrderId:      parsed.sapOrderId,
             wcrCode:         parsed.wcr || null,
             aarea:           parsed.aarea || null,
           });
-        }
-
-        if (newUsers.size > 0) {
-          await this.createNewUsers(newUsers, ctx);
-          const freshUsers = await this.db.query<{ employee_id: string; id: number }>(
-            `SELECT id, employee_id FROM users WHERE warehouse_id = @wid`,
-            { wid: ctx.warehouseId },
-          );
-          freshUsers.forEach((u) => ctx.userMap.set(u.employee_id, u.id));
-
-          for (const item of items) {
-            const parsed = this.parseItem(item);
-            if (!parsed || !newUsers.has(parsed.employeeId)) continue;
-            const resolved = resolveOperation(item);
-            if (resolved) operations.push(resolved);
-          }
         }
 
         this.logger.log(`   💾 Подготовлено к сохранению в чанке: ${operations.length}`);
@@ -502,7 +501,7 @@ export class SapIntegrationService {
       const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
       this.logger.log(
         `✅ Склад ${warehouseCode}: ${totalSaved} сохранено | ` +
-        `noAEI=${skippedNoAei} noWCR=${skippedNoWcr} noTariff=${skippedNoTariff} | ${elapsed}s`,
+        `noAEI=${skippedNoAei} noWCR=${skippedNoWcr} noTariff=${skippedNoTariff} noEmp=${skippedNoEmployee} aeiFallback=${savedAeiFallback} | ${elapsed}s`,
       );
       
       if (missingTariffs.size > 0) {
@@ -528,17 +527,19 @@ export class SapIntegrationService {
   // ──────────────────────────────────────────────────────────────
 
   private async buildSyncContext(warehouseCode: string, referenceDate: Date): Promise<SyncContext> {
-    const [warehouseRow, users, tariffs, wcrRows] = await Promise.all([
+    const [warehouseRow, users, employees, tariffs, wcrRows, wcrNormsRows] = await Promise.all([
       this.db.queryOne<{ id: number }>(
         `SELECT id FROM warehouses WHERE code = @code`,
         { code: warehouseCode },
       ),
       this.db.query<{ employee_id: string; id: number }>(
-        `SELECT id, employee_id FROM users
-         WHERE warehouse_id = (SELECT id FROM warehouses WHERE code = @code)`,
-        { code: warehouseCode },
+        `SELECT id, employee_id FROM users`,
       ),
-      // Тарифы: warehouse-specific имеет приоритет над ALL
+      this.db.query<{ personnel_number: string; rsrc: string; lgnum: string }>(
+        `SELECT personnel_number, rsrc, lgnum
+         FROM sap_employees
+         WHERE is_active = 1`,
+      ),
       this.db.query<{ operation_type: string; rate: number; norm_aei_per_hour: number | null }>(
         `SELECT operation_type, rate, norm_aei_per_hour
          FROM tariffs
@@ -551,16 +552,17 @@ export class SapIntegrationService {
            valid_from DESC`,
         { code: warehouseCode, refDate: referenceDate },
       ),
-      // WCR-маппинг из БД (не hardcode!)
       this.db.query<{ wcr_code: string; operation_type: string; participant_area: string }>(
         `SELECT wcr_code, operation_type, participant_area
          FROM wcr_mapping WHERE is_active = 1`,
+      ),
+      this.db.query<{ wcr_code: string; norm_type: string }>(
+        `SELECT wcr_code, norm_type FROM wcr_norms WHERE is_active = 1`,
       ),
     ]);
 
     if (!warehouseRow) throw new Error(`Склад не найден в БД: ${warehouseCode}`);
 
-    // Тарифы: первая запись по каждому operation_type (после сортировки — самый приоритетный)
     const tariffMap = new Map<string, { rate: number; norm_aei_per_hour: number | null }>();
     for (const t of tariffs) {
       if (!tariffMap.has(t.operation_type)) {
@@ -568,16 +570,40 @@ export class SapIntegrationService {
       }
     }
 
+    const usersByNorm = new Map<string, number>();
+    for (const u of users) {
+      this.addLookupKeys(usersByNorm, u.employee_id, u.id);
+    }
+
+    const userMap = new Map<string, number>();
+    const rsrcUserMap = new Map<string, number>();
+    for (const emp of employees) {
+      const userId = usersByNorm.get(this.normalizeId(emp.personnel_number));
+      if (userId === undefined) continue;
+      this.addLookupKeys(userMap, emp.personnel_number, userId);
+      if (emp.rsrc && emp.lgnum === warehouseCode) {
+        rsrcUserMap.set(emp.rsrc.trim().toUpperCase(), userId);
+      }
+    }
+
+    this.logger.log(
+      `   Справочник: ${employees.length} sap_employees, сопоставлено userMap=${userMap.size} rsrc=${rsrcUserMap.size}`,
+    );
+
     return {
       warehouseId:  warehouseRow.id,
       warehouseCode,
-      userMap:   new Map(users.map((u) => [u.employee_id, u.id])),
+      userMap,
+      rsrcUserMap,
       tariffMap,
       wcrMap:    new Map(
         wcrRows.map((r) => [
           r.wcr_code,
           { operation_type: r.operation_type, participant_area: r.participant_area },
         ]),
+      ),
+      wcrNormsMap: new Map(
+        wcrNormsRows.map((r) => [r.wcr_code, { normType: r.norm_type }]),
       ),
     };
   }
@@ -642,8 +668,9 @@ export class SapIntegrationService {
     const prodCount = Math.round(parseFloat(item.ZprodWtItm   || '0'));
     if (aeiCount <= 0 && prodCount <= 0) return null;
 
-    const employeeId = (item.Employeeid || item.Processor || '').trim();
-    if (!employeeId) return null;
+    const employeeId = (item.Employeeid || '').trim();
+    const processor  = (item.Processor || '').trim();
+    if (!employeeId && !processor) return null;
 
     // Дата из формата /Date(timestamp)/
     let operationDate = new Date();
@@ -653,7 +680,8 @@ export class SapIntegrationService {
     }
 
     return {
-      employeeId,
+      employeeId: employeeId || processor,
+      processor,
       employeeName1: (item.McName1 || '').trim(),
       employeeName2: (item.McName2 || '').trim(),
       warehouseCode: item.Lgnum,
@@ -779,29 +807,207 @@ export class SapIntegrationService {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // СОЗДАНИЕ НОВЫХ ПОЛЬЗОВАТЕЛЕЙ
+  // СПРАВОЧНИК СОТРУДНИКОВ (z_employee OData4)
   // ──────────────────────────────────────────────────────────────
 
-  private async createNewUsers(
-    newUsers: Map<string, { fio: string }>,
-    ctx: SyncContext,
-  ): Promise<void> {
-    this.logger.log(`   👤 Создание ${newUsers.size} новых сотрудников...`);
+  /** Ищет user_id в sap_employees: табельный номер, затем Rsrc. */
+  private resolveUserId(ctx: SyncContext, parsed: ParsedOperation): number | undefined {
+    for (const raw of [parsed.employeeId, parsed.processor]) {
+      if (!raw) continue;
+      const direct = ctx.userMap.get(raw);
+      if (direct !== undefined) return direct;
+      const norm = ctx.userMap.get(this.normalizeId(raw));
+      if (norm !== undefined) return norm;
+      const padded = ctx.userMap.get(this.padEmployeeId(raw));
+      if (padded !== undefined) return padded;
+    }
+    if (parsed.processor) {
+      const byRsrc = ctx.rsrcUserMap.get(parsed.processor.toUpperCase());
+      if (byRsrc !== undefined) return byRsrc;
+    }
+    return undefined;
+  }
 
-    for (const [employeeId, { fio }] of newUsers) {
-      try {
-        await this.db.execute(
-          `INSERT INTO users (employee_id, fio, warehouse_id, role, is_active)
-           VALUES (@employeeId, @fio, @warehouseId, 'employee', 1)`,
-          { employeeId, fio, warehouseId: ctx.warehouseId },
-        );
-        this.logger.log(`   ✅ Создан: ${employeeId} (${fio})`);
-      } catch (err) {
-        // Игнорируем гонку при параллельной обработке складов
-        if (!err.message?.includes('UNIQUE') && !err.message?.includes('duplicate')) throw err;
-        this.logger.warn(`   ⚠️  Дубликат (параллельный insert): ${employeeId}`);
+  private normalizeId(raw: string): string {
+    const s = (raw || '').trim();
+    if (!s) return '';
+    const stripped = s.replace(/^0+/, '');
+    return stripped === '' ? '0' : stripped;
+  }
+
+  private padEmployeeId(raw: string): string {
+    return this.normalizeId(raw).padStart(8, '0');
+  }
+
+  private addLookupKeys(map: Map<string, number>, raw: string, userId: number): void {
+    const trimmed = (raw || '').trim();
+    if (!trimmed) return;
+    map.set(trimmed, userId);
+    map.set(this.normalizeId(trimmed), userId);
+    map.set(this.padEmployeeId(trimmed), userId);
+  }
+
+  private async fetchAllSapEmployees(): Promise<SapEmployeeRow[]> {
+    const origin = new URL(this.employeeODataUrl).origin;
+    let nextUrl: string | null = `${this.employeeODataUrl}?sap-statistics=true`;
+    const rows: SapEmployeeRow[] = [];
+    let page = 0;
+
+    while (nextUrl) {
+      page += 1;
+      const url = nextUrl;
+      const items = await this.withRetry(
+        async () => {
+          const resp = await this.employeeAxios.get(url, { timeout: 180_000 });
+          if (resp.status >= 400) {
+            throw new Error(`z_employee HTTP ${resp.status}: ${JSON.stringify(resp.data).slice(0, 300)}`);
+          }
+          const list = resp.data?.value;
+          if (!Array.isArray(list)) {
+            throw new Error('z_employee: в ответе нет value[]');
+          }
+          const link = resp.data?.['@odata.nextLink'] as string | undefined;
+          return { list, link };
+        },
+        { label: `z_employee page ${page}`, maxAttempts: 3 },
+      );
+
+      for (const item of items.list) {
+        const personnelNumber = String(item.PersonnelNumber || '').trim();
+        const lgnum = String(item.Lgnum || '').trim();
+        if (!personnelNumber || !lgnum) continue;
+        rows.push({
+          lgnum,
+          rsrc: String(item.Rsrc || '').trim(),
+          personnel_number: personnelNumber,
+          employee_name: String(item.EmployeeName || '').trim() || `Сотрудник ${personnelNumber}`,
+          jobgr: String(item.Jobgr || '').trim(),
+          jobgr_text: String(item.JobgrText || '').trim(),
+        });
+      }
+
+      this.logger.log(`   страница ${page}: +${items.list.length}, всего ${rows.length}`);
+      if (!items.link) {
+        nextUrl = null;
+      } else if (items.link.startsWith('http')) {
+        nextUrl = items.link;
+      } else {
+        nextUrl = origin + items.link;
       }
     }
+
+    return rows;
+  }
+
+  private async upsertSapEmployees(rows: SapEmployeeRow[], _syncStart: Date): Promise<number> {
+    if (rows.length === 0) return 0;
+
+    const pool = this.db.getPool();
+    const CHUNK = 80;
+    let upserted = 0;
+
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      const values = chunk.map((r) => {
+        const lgnum = `N'${r.lgnum.replace(/'/g, "''")}'`;
+        const rsrc = `N'${r.rsrc.replace(/'/g, "''")}'`;
+        const pers = `N'${r.personnel_number.replace(/'/g, "''")}'`;
+        const name = `N'${r.employee_name.replace(/'/g, "''")}'`;
+        const jobgr = `N'${r.jobgr.replace(/'/g, "''")}'`;
+        const jobgrText = `N'${r.jobgr_text.replace(/'/g, "''")}'`;
+        return `(${lgnum}, ${rsrc}, ${pers}, ${name}, ${jobgr}, ${jobgrText})`;
+      }).join(',\n        ');
+
+      await pool.request().query(`
+        MERGE sap_employees AS target
+        USING (
+          SELECT * FROM (VALUES
+            ${values}
+          ) AS source(lgnum, rsrc, personnel_number, employee_name, jobgr, jobgr_text)
+        ) AS source
+        ON target.lgnum = source.lgnum AND target.personnel_number = source.personnel_number
+        WHEN MATCHED THEN
+          UPDATE SET
+            target.rsrc = source.rsrc,
+            target.employee_name = source.employee_name,
+            target.jobgr = source.jobgr,
+            target.jobgr_text = source.jobgr_text,
+            target.is_active = 1,
+            target.synced_at = GETDATE(),
+            target.updated_at = GETDATE()
+        WHEN NOT MATCHED THEN
+          INSERT (lgnum, rsrc, personnel_number, employee_name, jobgr, jobgr_text, is_active, synced_at)
+          VALUES (source.lgnum, source.rsrc, source.personnel_number, source.employee_name, source.jobgr, source.jobgr_text, 1, GETDATE());
+      `);
+      upserted += chunk.length;
+    }
+
+    return upserted;
+  }
+
+  private async deactivateMissingEmployees(syncStart: Date): Promise<void> {
+    await this.db.execute(
+      `UPDATE sap_employees
+       SET is_active = 0, updated_at = GETDATE()
+       WHERE synced_at < @syncStart AND is_active = 1`,
+      { syncStart },
+    );
+  }
+
+  /** Создаёт/обновляет users из справочника: employee_id = табельный с ведущими нулями. */
+  private async upsertUsersFromEmployees(): Promise<void> {
+    const employees = await this.db.query<{
+      lgnum: string;
+      personnel_number: string;
+      employee_name: string;
+    }>(
+      `SELECT lgnum, personnel_number, employee_name
+       FROM sap_employees WHERE is_active = 1`,
+    );
+    const warehouses = await this.db.query<{ id: number; code: string }>(
+      `SELECT id, code FROM warehouses`,
+    );
+    const warehouseByCode = new Map(warehouses.map((w) => [w.code, w.id]));
+    const users = await this.db.query<{ id: number; employee_id: string }>(
+      `SELECT id, employee_id FROM users`,
+    );
+    const userByNorm = new Map<string, { id: number; employee_id: string }>();
+    for (const u of users) {
+      userByNorm.set(this.normalizeId(u.employee_id), u);
+    }
+
+    let created = 0;
+    let updated = 0;
+
+    for (const emp of employees) {
+      const warehouseId = warehouseByCode.get(emp.lgnum);
+      if (!warehouseId) continue;
+
+      const employeeId = this.padEmployeeId(emp.personnel_number);
+      const existing = userByNorm.get(this.normalizeId(emp.personnel_number));
+
+      if (existing) {
+        await this.db.execute(
+          `UPDATE users SET fio = @fio, updated_at = GETDATE() WHERE id = @id`,
+          { fio: emp.employee_name, id: existing.id },
+        );
+        updated += 1;
+      } else {
+        try {
+          await this.db.execute(
+            `INSERT INTO users (employee_id, fio, warehouse_id, role, is_active)
+             VALUES (@employeeId, @fio, @warehouseId, 'employee', 1)`,
+            { employeeId, fio: emp.employee_name, warehouseId },
+          );
+          userByNorm.set(this.normalizeId(emp.personnel_number), { id: 0, employee_id: employeeId });
+          created += 1;
+        } catch (err) {
+          if (!err.message?.includes('UNIQUE') && !err.message?.includes('duplicate')) throw err;
+        }
+      }
+    }
+
+    this.logger.log(`   users: создано=${created}, обновлено ФИО=${updated}`);
   }
 
   // ──────────────────────────────────────────────────────────────

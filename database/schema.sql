@@ -59,6 +59,32 @@ CREATE INDEX idx_users_role ON users(role);
 GO
 
 -- =============================================
+-- Таблица: Справочник сотрудников SAP (z_employee)
+-- =============================================
+IF OBJECT_ID('sap_employees', 'U') IS NOT NULL DROP TABLE sap_employees;
+GO
+
+CREATE TABLE sap_employees (
+    id                 INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    lgnum              NVARCHAR(10)  NOT NULL,
+    rsrc               NVARCHAR(100) NOT NULL,
+    personnel_number   NVARCHAR(50)  NOT NULL,
+    employee_name      NVARCHAR(255) NOT NULL,
+    jobgr              NVARCHAR(20)  NULL,
+    jobgr_text         NVARCHAR(255) NULL,
+    is_active          BIT           NOT NULL DEFAULT 1,
+    synced_at          DATETIME      NOT NULL DEFAULT GETDATE(),
+    created_at         DATETIME      NOT NULL DEFAULT GETDATE(),
+    updated_at         DATETIME      NOT NULL DEFAULT GETDATE()
+);
+GO
+
+CREATE UNIQUE INDEX ux_sap_employees_wh_pers ON sap_employees(lgnum, personnel_number);
+CREATE INDEX idx_sap_employees_personnel ON sap_employees(personnel_number);
+CREATE INDEX idx_sap_employees_rsrc ON sap_employees(lgnum, rsrc);
+GO
+
+-- =============================================
 -- Таблица: Тарифы (расценки)
 -- =============================================
 IF OBJECT_ID('tariffs', 'U') IS NOT NULL DROP TABLE tariffs;
