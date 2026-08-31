@@ -1,28 +1,42 @@
 /**
  * Полная перезагрузка операций за последние 3 календарных месяца.
  *
- * 1. Тянет справочник сотрудников из z_employee
- * 2. Удаляет operations за период (это делает sync склада)
- * 3. Заново загружает WHOSet и привязывает людей через sap_employees
+ * Перед запуском в SSMS: database/migrations/015_add_sap_employees.sql
  *
- * Перед запуском:
- *   1. В SSMS выполнить database/migrations/015_add_sap_employees.sql
- *   2. cd backend && npm run build
- *
+ *   cd /home/admin-lc/salary_monitor/backend
  *   node scripts/reload-3months.js
  *
- * Идёт несколько часов (склады × дни). Не прерывать.
+ * Идёт несколько часов. Не прерывать.
  */
 require('reflect-metadata');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const backendRoot = path.join(__dirname, '..');
 process.chdir(backendRoot);
 
-const distApp = path.join(backendRoot, 'dist', 'app.module.js');
-if (!fs.existsSync(distApp)) {
-  console.error('Сначала соберите backend: npm run build');
+function resolveDist(rel) {
+  const candidates = [
+    path.join(backendRoot, 'dist', rel),
+    path.join(backendRoot, 'dist', 'src', rel),
+  ];
+  return candidates.find((p) => fs.existsSync(p));
+}
+
+let appModulePath = resolveDist('app.module.js');
+if (!appModulePath) {
+  console.log('dist не найден — запускаю npm run build ...');
+  execSync('npm run build', { cwd: backendRoot, stdio: 'inherit' });
+  appModulePath = resolveDist('app.module.js');
+}
+
+if (!appModulePath) {
+  console.error('Не найден dist/app.module.js после сборки.');
+  console.error('Выполните вручную:');
+  console.error('  cd /home/admin-lc/salary_monitor/backend');
+  console.error('  npm run build');
+  console.error('  node scripts/reload-3months.js');
   process.exit(1);
 }
 
@@ -30,8 +44,10 @@ require('dotenv').config({ path: path.join(backendRoot, '.env') });
 
 async function main() {
   const { NestFactory } = require('@nestjs/core');
-  const { AppModule } = require('../dist/app.module');
-  const { SapIntegrationService } = require('../dist/sap-integration/sap-integration.service');
+  const { AppModule } = require(appModulePath);
+  const servicePath =
+    resolveDist(path.join('sap-integration', 'sap-integration.service.js'));
+  const { SapIntegrationService } = require(servicePath);
 
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
