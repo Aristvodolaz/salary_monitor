@@ -25,6 +25,7 @@ export class OperationsController {
       offset,
       sortBy,
       sortOrder,
+      user.employeeId,
     );
   }
 
@@ -35,7 +36,7 @@ export class OperationsController {
   @Get('by-type')
   async getOperationsByType(@CurrentUser() user: any, @Query() query: GetOperationsDto) {
     const { startDate, endDate } = query;
-    return this.operationsService.getOperationsByType(user.id, startDate, endDate);
+    return this.operationsService.getOperationsByType(user.id, startDate, endDate, user.employeeId);
   }
 }
 

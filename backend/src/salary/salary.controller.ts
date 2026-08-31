@@ -20,19 +20,19 @@ export class SalaryController {
 
     switch (period) {
       case 'yesterday':
-        return this.salaryService.getSalaryYesterday(user.id);
+        return this.salaryService.getSalaryYesterday(user.id, user.employeeId);
 
       case 'month':
-        return this.salaryService.getSalaryCurrentMonth(user.id);
+        return this.salaryService.getSalaryCurrentMonth(user.id, user.employeeId);
 
       case 'custom':
         if (!startDate || !endDate) {
           throw new Error('Для периода custom требуются startDate и endDate');
         }
-        return this.salaryService.getSalaryByDateRange(user.id, startDate, endDate);
+        return this.salaryService.getSalaryByDateRange(user.id, startDate, endDate, user.employeeId);
 
       default:
-        return this.salaryService.getSalaryCurrentMonth(user.id);
+        return this.salaryService.getSalaryCurrentMonth(user.id, user.employeeId);
     }
   }
 
@@ -42,7 +42,7 @@ export class SalaryController {
    */
   @Get('stats')
   async getStats(@CurrentUser() user: any) {
-    return this.salaryService.getSalaryStats(user.id);
+    return this.salaryService.getSalaryStats(user.id, user.employeeId);
   }
 }
 
