@@ -12,7 +12,7 @@ export interface WcrNorm {
   is_active: boolean;
 }
 
-// ── Справочник комплектации (блок 2 — использует prod_count) ──────────────────
+// ── Справочник комплектации (блок 2 — зарплата: count × rate) ─────────────────
 
 export interface WcrPickingNorm {
   id: number;
@@ -44,11 +44,11 @@ export interface PickingStat {
   picking_type: string;
   norm_label: string;
   rate: number | null;
-  /** Кол-во продуктовых задач (prod_count) за период */
+  /** АЕИ комплектации (count) за период — то же поле, что в официальном своде */
   total_prod: number;
-  /** Кол-во операций с prod_count > 0 */
+  /** Кол-во операций с count > 0 */
   total_operations: number;
-  /** Расчётная сумма за период (total_prod × rate) */
+  /** Расчётная сумма за период (count × rate) */
   calc_amount: number | null;
 }
 
@@ -156,7 +156,7 @@ export class NormsService {
     });
   }
 
-  // ── Комплектация (блок 2: prod_count) ────────────────────────────────────────
+  // ── Комплектация (блок 2: count × ставка норм) ────────────────────────────────
 
   /** Справочник нормативов комплектации */
   async getAllPickingNorms(): Promise<WcrPickingNorm[]> {
@@ -170,7 +170,7 @@ export class NormsService {
   }
 
   /**
-   * Статистика комплектации за период, используя prod_count (ZprodWtItm).
+   * Статистика комплектации за период, используя count (АЕИ).
    * Левое JOIN: все коды из wcr_picking_norms, даже если операций не было.
    */
   async getPickingStats(
@@ -200,8 +200,8 @@ export class NormsService {
         n.picking_type,
         n.norm_label,
         n.rate,
-        ISNULL(SUM(o.prod_count), 0) AS total_prod,
-        ISNULL(COUNT(CASE WHEN o.prod_count > 0 THEN 1 END), 0) AS total_operations
+        ISNULL(SUM(o.count), 0) AS total_prod,
+        ISNULL(COUNT(CASE WHEN o.count > 0 THEN 1 END), 0) AS total_operations
       FROM wcr_picking_norms n
       LEFT JOIN operations o
         ON o.wcr_code = n.wcr_code
@@ -386,7 +386,7 @@ export class NormsService {
 
   /**
    * Список сотрудников с заработком по операциям из wcr_norms и wcr_picking_norms.
-   * АЕИ и продуктовые задачи показаны отдельно.
+   * АЕИ приёмки и АЕИ комплектации показаны отдельно; комплектация = count × rate.
    */
   async getNormsEmployees(
     warehouseId: number,
@@ -405,16 +405,16 @@ export class NormsService {
                                                                  AS total_aei,
         ISNULL(SUM(CASE WHEN wn.wcr_code IS NOT NULL THEN o.amount ELSE 0 END), 0)
                                                                  AS aei_amount,
-        -- Блок 2: Продуктовые задачи (wcr_picking_norms)
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL THEN ISNULL(o.prod_count, 0) ELSE 0 END), 0)
+        -- Блок 2: Комплектация (wcr_picking_norms) — count × rate
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL THEN ISNULL(o.count, 0) ELSE 0 END), 0)
                                                                  AS total_prod,
         ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.rate IS NOT NULL
-                        THEN ISNULL(o.prod_count, 0) * wp.rate ELSE 0 END), 0)
+                        THEN ISNULL(o.count, 0) * wp.rate ELSE 0 END), 0)
                                                                  AS picking_amount,
         -- Итого
         ISNULL(SUM(CASE WHEN wn.wcr_code IS NOT NULL THEN o.amount ELSE 0 END), 0) +
         ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.rate IS NOT NULL
-                        THEN ISNULL(o.prod_count, 0) * wp.rate ELSE 0 END), 0)
+                        THEN ISNULL(o.count, 0) * wp.rate ELSE 0 END), 0)
                                                                  AS total_amount
       FROM operations o
       INNER JOIN users u       ON o.user_id = u.id
@@ -476,8 +476,8 @@ export class NormsService {
           wp.participant_area,
           wp.picking_type,
           wp.rate,
-          SUM(ISNULL(o.prod_count, 0))  AS total_prod,
-          SUM(ISNULL(o.prod_count, 0) * ISNULL(wp.rate, 0)) AS total_amount,
+          SUM(ISNULL(o.count, 0))  AS total_prod,
+          SUM(ISNULL(o.count, 0) * ISNULL(wp.rate, 0)) AS total_amount,
           COUNT(*)                       AS operations_count,
           MIN(o.operation_date)          AS first_date,
           MAX(o.operation_date)          AS last_date
@@ -488,7 +488,7 @@ export class NormsService {
           AND u.warehouse_id = @warehouseId
           AND o.operation_date >= @startDate
           AND o.operation_date <  DATEADD(DAY, 1, CAST(@endDate AS DATE))
-          AND ISNULL(o.prod_count, 0) > 0
+          AND ISNULL(o.count, 0) > 0
         GROUP BY o.wcr_code, wp.description_new, wp.participant_area, wp.picking_type, wp.rate
         ORDER BY total_amount DESC
         `,

@@ -58,20 +58,12 @@ export class OperationsService {
         sd.operation_type,
         sd.participant_area,
         sd.aei_count,
-        o.prod_count,
+        sd.prod_count,
         sd.operation_date,
-        COALESCE(wp.rate, sd.rate) as rate,
-        CASE WHEN wp.wcr_code IS NOT NULL THEN 1 ELSE 0 END as is_picking,
-        CASE
-          WHEN wp.wcr_code IS NOT NULL
-            THEN CAST(ISNULL(o.prod_count, 0) AS FLOAT) * ISNULL(wp.rate, 0)
-          WHEN sd.rate IS NOT NULL
-            THEN CAST(ISNULL(sd.aei_count, 0) AS FLOAT) * sd.rate
-          ELSE sd.base_amount
-        END as base_amount
+        sd.rate,
+        sd.is_picking,
+        sd.base_amount
       FROM v_salary_details sd
-      LEFT JOIN operations o ON o.id = sd.operation_id
-      LEFT JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
       WHERE sd.user_id IN (${inSql})
     `;
 

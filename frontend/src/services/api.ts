@@ -141,7 +141,7 @@ export const normsAPI = {
     api.get('/norms/stats', { params: { startDate, endDate, warehouseCode } }),
   saveStatsSnapshot: (body: { startDate: string; endDate: string; warehouseCode?: string }) =>
     api.post('/norms/stats/snapshot', body),
-  // ── Блок 2: Продуктовые задачи (комплектация) ────────────────────────────────
+  // ── Блок 2: Комплектация (count × ставка норм) ────────────────────────────────
   getPickingNorms: () => api.get('/norms/picking'),
   getPickingStats: (startDate: string, endDate: string, warehouseCode?: string) =>
     api.get('/norms/picking/stats', { params: { startDate, endDate, warehouseCode } }),

@@ -58,16 +58,12 @@ interface TypeShare {
 const fmtMoney = (n: number) =>
   Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** Комплектация: задачи × ставка. Сортировка / АЕИ: АЕИ × ставка. */
+/** Комплектация: АЕИ × ставка норм. Сортировка / прочие АЕИ: АЕИ × тариф. */
 const earningFormula = (op: OperationRow): string | null => {
   const rate = Number(op.rate || 0);
-  const prod = Number(op.prod_count || 0);
   const aei = Number(op.aei_count || 0);
-  if (rate <= 0) return null;
-  if (isPickingOp(op)) {
-    return prod > 0 ? `${prod} шт × ${fmtMoney(rate)}` : null;
-  }
-  return aei > 0 ? `${aei} АЕИ × ${fmtMoney(rate)}` : null;
+  if (rate <= 0 || aei <= 0) return null;
+  return `${aei} АЕИ × ${fmtMoney(rate)}`;
 };
 
 const isPickingOp = (op: OperationRow) => {
@@ -250,7 +246,7 @@ const OperationCard = ({ op }: { op: OperationRow }) => {
                   letterSpacing: '0.06em',
                 }}
               >
-                Задачи
+                SAP задачи
               </Typography>
               <Typography
                 sx={{
@@ -296,9 +292,7 @@ const OperationCard = ({ op }: { op: OperationRow }) => {
                 fontWeight: 600,
               }}
             >
-              {picking
-                ? `${fmtMoney(op.rate || 0)} К / шт`
-                : `${fmtMoney(op.rate || 0)} К / АЕИ`}
+              {`${fmtMoney(op.rate || 0)} К / АЕИ`}
             </Typography>
           </Box>
         </Box>
@@ -538,7 +532,7 @@ const OperationsPage = () => {
     <Box>
       <PageHeader
         title="Мои операции"
-        subtitle="Комплектация: задачи × ставка. Сортировка и прочие АЕИ: АЕИ × ставка. Итог сверху — за выбранные дни, с коэффициентом качества."
+        subtitle="Комплектация: АЕИ × ставка норм комплектации. Сортировка и прочие АЕИ: АЕИ × тариф. Итог сверху — за выбранные дни, с коэффициентом качества."
       />
 
       <Box
@@ -576,7 +570,7 @@ const OperationsPage = () => {
               ]}
             />
             <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', mt: 1, px: 0.5 }}>
-              Итог за календарные дни периода, с коэффициентом качества. Комплектация — задачи × ставка, сортировка — АЕИ × ставка.
+              Итог за календарные дни периода, с коэффициентом качества. Комплектация — АЕИ × ставка норм, сортировка — АЕИ × тариф.
             </Typography>
           </Box>
         )}
@@ -748,8 +742,10 @@ const OperationsPage = () => {
                         АЕИ
                       </TableSortLabel>
                     </TableCell>
-                    <TableCell align="right" sx={{ width: 80 }}>
-                      Задачи
+                    <TableCell align="right" sx={{ width: 96 }}>
+                      <Tooltip title="SAP ZprodWtItm. В расчёт ЗП не входит — зарплата комплектации = АЕИ × ставка норм.">
+                        <span>SAP задачи</span>
+                      </Tooltip>
                     </TableCell>
                     <TableCell
                       align="right"
@@ -769,7 +765,7 @@ const OperationsPage = () => {
                       sortDirection={sortBy === 'base_amount' ? sortOrder : false}
                       sx={{ width: 180, color: 'var(--color-gold) !important' }}
                     >
-                      <Tooltip title="Комплектация: задачи × ставка. Сортировка: АЕИ × ставка.">
+                      <Tooltip title="Комплектация: АЕИ × ставка норм. Сортировка: АЕИ × тариф.">
                         <TableSortLabel
                           active={sortBy === 'base_amount'}
                           direction={sortBy === 'base_amount' ? sortOrder : 'asc'}
@@ -804,7 +800,7 @@ const OperationsPage = () => {
                       </TableCell>
                       <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>
                         {fmtMoney(op.rate || 0)}{' '}
-                        {isPickingOp(op) ? 'К/шт' : 'К/АЕИ'}
+                        К/АЕИ
                       </TableCell>
                       <TableCell align="right">
                         <Box

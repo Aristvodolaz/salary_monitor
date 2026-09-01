@@ -23,7 +23,7 @@ interface SyncContext {
   wcrMap: Map<string, { operation_type: string; participant_area: string }>;
   /** wcr_code → norm_type (справочник wcr_norms — блок 1/АЕИ, без тарифа) */
   wcrNormsMap: Map<string, { normType: string }>;
-  /** wcr в wcr_picking_norms → комплектация: amount = prod_count × rate */
+  /** wcr в wcr_picking_norms → комплектация: amount = count × rate */
   pickingNormMap: Map<string, number | null>;
 }
 
@@ -33,9 +33,9 @@ interface ParsedOperation {
   employeeName1: string;
   employeeName2: string;
   warehouseCode: string;
-  /** Фактическое АЕИ из ZsumAmountItm — блок 1 (приёмка, размещение, пополнение) */
+  /** Фактическое АЕИ из ZsumAmountItm — в ЗП (и комплектация, и сортировка) */
   aeiCount: number;
-  /** Кол-во продуктовых задач из ZprodWtItm — блок 2 (комплектация) */
+  /** SAP ZprodWtItm — сохраняем в prod_count, в деньги не идёт */
   prodCount: number;
   /** Фактическое время (минуты) — только для логов/справки */
   actdura: number;
@@ -50,11 +50,11 @@ interface OperationRow {
   warehouseCode: string;
   operationType: string;
   participantArea: string;
-  count: number;       // АЕИ (ZsumAmountItm) — блок 1
-  prodCount: number;   // продуктовые задачи (ZprodWtItm) — блок 2
+  count: number;       // АЕИ (ZsumAmountItm) — в ЗП идёт это поле
+  prodCount: number;   // SAP ZprodWtItm — храним, в деньги не идёт
   actdura: number;     // минуты
   operationDate: Date;
-  amount: number;      // комплектация: prod×ставка; сортировка/АЕИ: АЕИ×ставка
+  amount: number;      // picking: АЕИ×ставка норм; mapped: АЕИ×тариф; иначе 0
   sapOrderId: string | null;
   wcrCode: string | null;   // оригинальный WCR-код из SAP
   aarea: string | null;     // зона активности из SAP WHOSet.Aarea
@@ -323,7 +323,7 @@ export class SapIntegrationService {
   }
 
   /** Строит OperationRow для нормативной записи.
-   *  Если WCR не в wcr_mapping — operation_type = wcr_code (amount = 0).
+   *  Unmapped: operation_type = wcr_code; amount = picking rate если код в нормах комплектации, иначе 0.
    */
   private buildNormsRow(
     parsed: ParsedOperation,
@@ -334,7 +334,7 @@ export class SapIntegrationService {
     const wcrEntry       = ctx.wcrMap.get(parsed.wcr);
     const operationType  = wcrEntry?.operation_type  ?? parsed.wcr;
     const participantArea = wcrEntry?.participant_area ?? '';
-    const tariff         = ctx.tariffMap.get(operationType);
+    const tariff         = wcrEntry ? ctx.tariffMap.get(operationType) : undefined;
     const amount         = this.resolveAmount(parsed, ctx, tariff?.rate);
 
     return {
@@ -408,13 +408,30 @@ export class SapIntegrationService {
         `${ctx.tariffMap.size} тарифов, ${ctx.wcrMap.size} WCR`,
       );
 
-      // Шаг 2: Очистка периода (идемпотентность)
-      const deleted = await this.deleteOperationsForPeriod(warehouseCode, periodStart, periodEnd);
-      this.logger.log(`   🗑️  Удалено старых записей: ${deleted}`);
-
-      // Шаг 3 & 4 & 5 & 6: Обработка по чанкам для экономии памяти
+      // Чанки считаем заранее: сначала проверка SAP, потом DELETE.
       const chunks = this.getDateChunks(periodStart, periodEnd, this.CHUNK_DAYS);
       this.logger.log(`   Разбито на ${chunks.length} чанков для последовательной загрузки`);
+
+      // Не стираем период, пока SAP не ответил на первый день.
+      if (chunks.length > 0) {
+        const probe = chunks[0];
+        const probeFilter = this.buildODataFilter(warehouseCode, probe.startDate, probe.endDate);
+        const probeUrl = `/WHOSet?${probeFilter}&$format=json`;
+        await this.withRetry(
+          async () => {
+            const resp = await this.axiosInstance.get(probeUrl, { timeout: 180_000 });
+            if (resp.status >= 400) {
+              throw new Error(`SAP probe HTTP ${resp.status}`);
+            }
+            return resp.data?.d?.results || [];
+          },
+          { label: `probe SAP [${warehouseCode}]`, maxAttempts: 3 },
+        );
+        this.logger.log(`   SAP доступен — очищаем период и грузим заново`);
+      }
+
+      const deleted = await this.deleteOperationsForPeriod(warehouseCode, periodStart, periodEnd);
+      this.logger.log(`   🗑️  Удалено старых записей: ${deleted}`);
       
       let skippedNoAei    = 0;
       let skippedNoWcr    = 0;
@@ -460,20 +477,24 @@ export class SapIntegrationService {
 
           if (wcrEntry) {
             const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
-            if (!tariff) {
+            const isPicking = ctx.pickingNormMap.has(parsed.wcr);
+            // Комплектация живёт на ставке норм, тариф не обязателен.
+            if (!tariff && !isPicking) {
               skippedNoTariff++;
               missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
               continue;
             }
             operationType   = wcrEntry.operation_type;
             participantArea = wcrEntry.participant_area;
-            amount = this.resolveAmount(parsed, ctx, tariff.rate);
+            amount = this.resolveAmount(parsed, ctx, tariff?.rate);
           } else {
+            // Unmapped: как раньше — сохраняем только коды из wcr_norms.
+            // Тариф не подставляем: иначе RPL (и любой unmapped) снова получит 5.9.
             const normEntry = ctx.wcrNormsMap.get(parsed.wcr);
             if (!normEntry) { skippedNoWcr++; continue; }
             operationType   = normEntry.normType;
             participantArea = 'АЕИ';
-            amount = this.resolveAmount(parsed, ctx, ctx.tariffMap.get(operationType)?.rate);
+            amount = this.resolveAmount(parsed, ctx);
             savedAeiFallback++;
           }
 
@@ -662,12 +683,18 @@ export class SapIntegrationService {
   }
 
   /**
-   * Комплектация (wcr_picking_norms): задачи × ставка.
-   * Сортировка / АЕИ (приёмка, пополнение): АЕИ × ставка.
+   * Одна формула с v_salary_details / migration 017:
+   * комплектация (wcr_picking_norms): АЕИ × ставка норм;
+   * иначе только если WCR в wcr_mapping: АЕИ × тариф;
+   * иначе (unmapped, в т.ч. RPL1/2/3/5): 0.
+   * prod_count в деньги не идёт.
    */
   private resolveAmount(parsed: ParsedOperation, ctx: SyncContext, tariffRate?: number): number {
     if (ctx.pickingNormMap.has(parsed.wcr)) {
-      return parsed.prodCount * (ctx.pickingNormMap.get(parsed.wcr) ?? 0);
+      return parsed.aeiCount * (ctx.pickingNormMap.get(parsed.wcr) ?? 0);
+    }
+    if (!ctx.wcrMap.has(parsed.wcr)) {
+      return 0;
     }
     return parsed.aeiCount * (tariffRate ?? 0);
   }
@@ -678,8 +705,7 @@ export class SapIntegrationService {
 
   private parseItem(item: any): ParsedOperation | null {
     // ╔══════════════════════════════════════════════════════════════╗
-    // ║  Блок 1: Вn = ZsumAmountItm — АЕИ (приёмка, размещение)    ║
-    // ║  Блок 2: ZprodWtItm — продуктовые задачи (комплектация)     ║
+    // ║  ЗП: ZsumAmountItm (АЕИ). ZprodWtItm только храним.         ║
     // ║  Пропускаем запись только если ОБА равны 0.                  ║
     // ╚══════════════════════════════════════════════════════════════╝
     const aeiCount  = Math.round(parseFloat(item.ZsumAmountItm || '0'));
