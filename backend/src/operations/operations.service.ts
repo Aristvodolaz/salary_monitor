@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { UsersService } from '../users/users.service';
+import { sqlInclusiveDayRange } from '../common/sql-day-range';
 
 @Injectable()
 export class OperationsService {
@@ -28,55 +29,58 @@ export class OperationsService {
     employeeId?: string,
   ) {
     const sortColumns: Record<string, string> = {
-      operation_id: 'operation_id',
-      operation_date: 'operation_date',
-      operation_type: 'operation_type',
-      participant_area: 'participant_area',
-      aei_count: 'aei_count',
-      rate: 'rate',
-      base_amount: 'base_amount',
-      warehouse_code: 'warehouse_code',
-      warehouse_name: 'warehouse_name',
-      employee_id: 'employee_id',
-      fio: 'fio',
+      operation_id: 'sd.operation_id',
+      operation_date: 'sd.operation_date',
+      operation_type: 'sd.operation_type',
+      participant_area: 'sd.participant_area',
+      aei_count: 'sd.aei_count',
+      rate: 'sd.rate',
+      base_amount: 'sd.base_amount',
+      warehouse_code: 'sd.warehouse_code',
+      warehouse_name: 'sd.warehouse_name',
+      employee_id: 'sd.employee_id',
+      fio: 'sd.fio',
     };
-    const safeSortColumn = sortColumns[sortBy] || 'operation_date';
+    const safeSortColumn = sortColumns[sortBy] || 'sd.operation_date';
     const safeSortDirection = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     const { sql: inSql, params: inParams } = await this.userIdFilter(userId, employeeId);
 
+    const day = sqlInclusiveDayRange('sd.operation_date');
     let query = `
       SELECT
-        operation_id,
-        user_id,
-        employee_id,
-        fio,
-        warehouse_code,
-        warehouse_name,
-        operation_type,
-        participant_area,
-        aei_count,
-        operation_date,
-        rate,
-        base_amount
-      FROM v_salary_details
-      WHERE user_id IN (${inSql})
+        sd.operation_id,
+        sd.user_id,
+        sd.employee_id,
+        sd.fio,
+        sd.warehouse_code,
+        sd.warehouse_name,
+        sd.operation_type,
+        sd.participant_area,
+        sd.aei_count,
+        sd.prod_count,
+        sd.operation_date,
+        sd.rate,
+        sd.is_picking,
+        sd.base_amount
+      FROM v_salary_details sd
+      WHERE sd.user_id IN (${inSql})
     `;
 
     const params: any = { ...inParams };
 
     if (startDate) {
-      query += ' AND operation_date >= @startDate';
+      query += ` AND ${day.start}`;
       params.startDate = startDate;
     }
 
     if (endDate) {
-      query += ' AND operation_date <= @endDate';
+      query += ` AND ${day.end}`;
       params.endDate = endDate;
     }
 
     query += `
-      ORDER BY ${safeSortColumn} ${safeSortDirection}, operation_id DESC
+      ORDER BY ${safeSortColumn} ${safeSortDirection}, sd.operation_id DESC
       OFFSET @offset ROWS
       FETCH NEXT @limit ROWS ONLY
     `;
@@ -86,18 +90,19 @@ export class OperationsService {
 
     const operations = await this.db.query(query, params);
 
+    const countDay = sqlInclusiveDayRange('operation_date');
     let countQuery = `
       SELECT COUNT(*) as total
-      FROM operations
+      FROM v_salary_details
       WHERE user_id IN (${inSql})
     `;
 
     if (startDate) {
-      countQuery += ' AND operation_date >= @startDate';
+      countQuery += ` AND ${countDay.start}`;
     }
 
     if (endDate) {
-      countQuery += ' AND operation_date <= @endDate';
+      countQuery += ` AND ${countDay.end}`;
     }
 
     const countResult = await this.db.queryOne(countQuery, {
@@ -142,13 +147,14 @@ export class OperationsService {
 
     const params: any = { ...inParams };
 
+    const day = sqlInclusiveDayRange('sd.operation_date');
     if (startDate) {
-      query += ' AND sd.operation_date >= @startDate';
+      query += ` AND ${day.start}`;
       params.startDate = startDate;
     }
 
     if (endDate) {
-      query += ' AND sd.operation_date <= @endDate';
+      query += ` AND ${day.end}`;
       params.endDate = endDate;
     }
 

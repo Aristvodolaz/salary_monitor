@@ -1,26 +1,45 @@
 -- =============================================
--- SalaryMonitor SQL Views
--- Представления для расчета зарплаты
+-- Migration 016: комплектация и сортировка считаются по-разному
+-- Комплектация (wcr_picking_norms): prod_count × ставка
+-- Сортировка / АЕИ: count × ставка из tariffs
 -- =============================================
 
 USE SalaryMonitor;
 GO
 
--- Сначала зависимые представления, иначе DROP v_salary_details падает
+PRINT N'--- Пересчёт amount в operations ---';
+
+-- Комплектация
+UPDATE o
+SET o.amount = CAST(ISNULL(o.prod_count, 0) AS FLOAT) * ISNULL(wp.rate, 0),
+    o.updated_at = GETDATE()
+FROM operations o
+INNER JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1;
+GO
+
+-- Сортировка / прочие АЕИ (нет в wcr_picking_norms)
+UPDATE o
+SET o.amount = CAST(ISNULL(o.count, 0) AS FLOAT) * t.rate,
+    o.updated_at = GETDATE()
+FROM operations o
+INNER JOIN tariffs t ON
+    (o.warehouse_code = t.warehouse_code OR t.warehouse_code = 'ALL')
+    AND o.operation_type = t.operation_type
+    AND t.is_active = 1
+    AND o.operation_date >= t.valid_from
+    AND (t.valid_to IS NULL OR o.operation_date <= t.valid_to)
+WHERE NOT EXISTS (
+    SELECT 1 FROM wcr_picking_norms wp
+    WHERE wp.wcr_code = o.wcr_code AND wp.is_active = 1
+);
+GO
+
+PRINT N'--- Пересоздание представлений ---';
+
 IF OBJECT_ID('v_operations_stats', 'V') IS NOT NULL DROP VIEW v_operations_stats;
 IF OBJECT_ID('v_top_performers', 'V') IS NOT NULL DROP VIEW v_top_performers;
 IF OBJECT_ID('v_salary_by_month', 'V') IS NOT NULL DROP VIEW v_salary_by_month;
 IF OBJECT_ID('v_salary_by_day', 'V') IS NOT NULL DROP VIEW v_salary_by_day;
-IF OBJECT_ID('v_salary_details', 'V') IS NOT NULL DROP VIEW v_salary_details;
-GO
-
--- =============================================
--- View: Детальный расчет зарплаты по операциям
--- Комплектация: АЕИ (count) × ставка из wcr_picking_norms
--- Сортировка / АЕИ: count × ставка из tariffs, только если WCR в wcr_mapping
--- prod_count хранится, но в деньги не идёт
--- Ккач НЕ применяется на уровне операций
--- =============================================
 IF OBJECT_ID('v_salary_details', 'V') IS NOT NULL DROP VIEW v_salary_details;
 GO
 
@@ -38,23 +57,22 @@ SELECT
     o.count AS aei_count,
     o.prod_count,
     o.operation_date,
-    CASE WHEN wp.wcr_code IS NOT NULL THEN wp.rate ELSE t.rate END AS rate,
+    COALESCE(wp.rate, t.rate) AS rate,
     t.norm_aei_per_hour,
     CASE WHEN wp.wcr_code IS NOT NULL THEN 1 ELSE 0 END AS is_picking,
     CASE
         WHEN wp.wcr_code IS NOT NULL
-            THEN CAST(ISNULL(o.count, 0) AS FLOAT) * ISNULL(wp.rate, 0)
-        WHEN wm.wcr_code IS NOT NULL AND t.rate IS NOT NULL
+            THEN CAST(ISNULL(o.prod_count, 0) AS FLOAT) * ISNULL(wp.rate, 0)
+        WHEN t.rate IS NOT NULL
             THEN CAST(ISNULL(o.count, 0) AS FLOAT) * t.rate
-        ELSE 0
+        ELSE ISNULL(o.amount, 0)
     END AS base_amount
 FROM operations o
 INNER JOIN users u ON o.user_id = u.id
 INNER JOIN warehouses w ON o.warehouse_code = w.code
-LEFT JOIN wcr_mapping wm ON wm.wcr_code = o.wcr_code AND wm.is_active = 1
 LEFT JOIN tariffs t ON
     (o.warehouse_code = t.warehouse_code OR t.warehouse_code = 'ALL')
-    AND wm.operation_type = t.operation_type
+    AND o.operation_type = t.operation_type
     AND o.operation_date >= t.valid_from
     AND (t.valid_to IS NULL OR o.operation_date <= t.valid_to)
     AND t.is_active = 1
@@ -62,16 +80,8 @@ LEFT JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
 WHERE u.is_active = 1;
 GO
 
--- =============================================
--- View: Агрегированная зарплата по дням
--- Применяем Ккач к СУММЕ за день: Итог = Ʃ(АЕИ * Расценка) * Ккач
--- Ккач берется из salary_summary, если нет - используем 1.0
--- =============================================
-IF OBJECT_ID('v_salary_by_day', 'V') IS NOT NULL DROP VIEW v_salary_by_day;
-GO
-
 CREATE VIEW v_salary_by_day AS
-SELECT 
+SELECT
     sd.user_id,
     sd.employee_id,
     sd.fio,
@@ -84,10 +94,10 @@ SELECT
     COALESCE(ss.quality_coefficient, 1.0) AS quality_coefficient,
     SUM(sd.base_amount) * COALESCE(ss.quality_coefficient, 1.0) AS total_amount
 FROM v_salary_details sd
-LEFT JOIN salary_summary ss ON 
-    sd.user_id = ss.user_id 
+LEFT JOIN salary_summary ss ON
+    sd.user_id = ss.user_id
     AND CAST(sd.operation_date AS DATE) BETWEEN ss.period_start AND ss.period_end
-GROUP BY 
+GROUP BY
     sd.user_id,
     sd.employee_id,
     sd.fio,
@@ -97,15 +107,8 @@ GROUP BY
     COALESCE(ss.quality_coefficient, 1.0);
 GO
 
--- =============================================
--- View: Агрегированная зарплата по месяцам
--- Применяем средний Ккач за месяц к СУММЕ: Итог = Ʃ(АЕИ * Расценка) * AVG(Ккач)
--- =============================================
-IF OBJECT_ID('v_salary_by_month', 'V') IS NOT NULL DROP VIEW v_salary_by_month;
-GO
-
 CREATE VIEW v_salary_by_month AS
-SELECT 
+SELECT
     user_id,
     employee_id,
     fio,
@@ -118,9 +121,9 @@ SELECT
     SUM(total_aei) AS total_aei,
     SUM(base_amount) AS base_amount,
     AVG(quality_coefficient) AS avg_quality_coefficient,
-    SUM(total_amount) AS total_amount  -- Уже с учетом Ккач из v_salary_by_day
+    SUM(total_amount) AS total_amount
 FROM v_salary_by_day
-GROUP BY 
+GROUP BY
     user_id,
     employee_id,
     fio,
@@ -130,14 +133,8 @@ GROUP BY
     MONTH(date);
 GO
 
--- =============================================
--- View: Топ сотрудников по зарплате
--- =============================================
-IF OBJECT_ID('v_top_performers', 'V') IS NOT NULL DROP VIEW v_top_performers;
-GO
-
 CREATE VIEW v_top_performers AS
-SELECT 
+SELECT
     user_id,
     employee_id,
     fio,
@@ -146,11 +143,11 @@ SELECT
     COUNT(DISTINCT date) AS work_days,
     SUM(operations_count) AS total_operations,
     SUM(total_aei) AS total_aei,
-    SUM(total_amount) AS total_salary,  -- Уже с учетом Ккач
+    SUM(total_amount) AS total_salary,
     AVG(total_amount) AS avg_daily_salary
 FROM v_salary_by_day
 WHERE date >= DATEADD(MONTH, -1, GETDATE())
-GROUP BY 
+GROUP BY
     user_id,
     employee_id,
     fio,
@@ -158,14 +155,8 @@ GROUP BY
     warehouse_name;
 GO
 
--- =============================================
--- View: Статистика по операциям
--- =============================================
-IF OBJECT_ID('v_operations_stats', 'V') IS NOT NULL DROP VIEW v_operations_stats;
-GO
-
 CREATE VIEW v_operations_stats AS
-SELECT 
+SELECT
     warehouse_code,
     warehouse_name,
     operation_type,
@@ -174,21 +165,14 @@ SELECT
     SUM(aei_count) AS total_aei,
     AVG(aei_count) AS avg_aei_per_operation,
     AVG(rate) AS avg_rate,
-    SUM(base_amount) AS total_amount  -- Без Ккач, т.к. статистика по операциям
+    SUM(base_amount) AS total_amount
 FROM v_salary_details
 WHERE operation_date >= DATEADD(MONTH, -1, GETDATE())
-GROUP BY 
+GROUP BY
     warehouse_code,
     warehouse_name,
     operation_type;
 GO
 
-PRINT 'Views created successfully!';
-PRINT '';
-PRINT 'Available views:';
-PRINT '- v_salary_details: Детальный расчет по операциям';
-PRINT '- v_salary_by_day: Зарплата по дням';
-PRINT '- v_salary_by_month: Зарплата по месяцам';
-PRINT '- v_top_performers: Топ сотрудников';
-PRINT '- v_operations_stats: Статистика по операциям';
-
+PRINT N'✅ Migration 016 completed: picking vs AEI/sorting formulas split';
+GO

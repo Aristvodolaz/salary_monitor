@@ -185,7 +185,7 @@ const ExpandedEmployeeDetail = ({
       {detail.picking.length > 0 && (
         <Box>
           <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--color-text-secondary)', mb: 1 }}>
-            Комплектация (блок 2, продуктовые задачи)
+            Комплектация (блок 2, АЕИ × ставка норм)
           </Typography>
           {detail.picking.map((row) => (
             <Box
@@ -213,7 +213,7 @@ const ExpandedEmployeeDetail = ({
                 }}
               />
               <Typography sx={{ fontFamily: 'monospace', fontSize: '0.8rem', minWidth: 80, textAlign: 'right' }}>
-                {fmtInt(row.total_prod)} задач
+                {fmtInt(row.total_prod)} АЕИ
               </Typography>
               <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.8rem', minWidth: 90, textAlign: 'right', color: '#3B82F6' }}>
                 {fmt(row.total_amount)} ₽
@@ -438,7 +438,7 @@ const NormsPage = () => {
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="work_days">Дней</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_aei">АЕИ</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="aei_amount">Сумма АЕИ, ₽</SortLabel></HeaderCell>
-                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_prod">Задач</SortLabel></HeaderCell>
+                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_prod">АЕИ компл.</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="picking_amount">Сумма компл., ₽</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right', color: 'var(--color-gold)' }}><SortLabel col="total_amount">Итого, ₽</SortLabel></HeaderCell>
               </TableRow>

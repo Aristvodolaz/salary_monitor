@@ -79,7 +79,7 @@ export class NormsController {
     );
   }
 
-  // ── Комплектация (блок 2: продуктовые задачи / prod_count) ───────────────────
+  // ── Комплектация (блок 2: count × ставка норм) ────────────────────────────────
 
   /**
    * GET /api/norms/picking
@@ -92,7 +92,7 @@ export class NormsController {
 
   /**
    * GET /api/norms/picking/stats?startDate=&endDate=&warehouseCode=
-   * Статистика комплектации за период (prod_count из операций)
+   * Статистика комплектации за период (count / АЕИ из операций)
    */
   @Get('picking/stats')
   async getPickingStats(

@@ -51,8 +51,8 @@ export class AdminService {
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.warehouse_id = @warehouseId
-        AND sd.operation_date >= @startDate
-        AND sd.operation_date <= @endDate
+        AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+        AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
         AND u.employee_id != '00000000'
       GROUP BY sd.user_id, u.employee_id, u.fio
       ORDER BY total_amount DESC
@@ -80,8 +80,8 @@ export class AdminService {
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
         AND u.warehouse_id = @warehouseId
-        AND sd.operation_date >= @startDate
-        AND sd.operation_date <= @endDate
+        AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+        AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
     `;
 
     const countResult = await this.db.queryOne<{ total: number }>(countQuery, {
@@ -108,8 +108,8 @@ export class AdminService {
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
         AND u.warehouse_id = @warehouseId
-        AND sd.operation_date >= @startDate
-        AND sd.operation_date <= @endDate
+        AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+        AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
       ORDER BY sd.operation_date DESC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `;
@@ -178,8 +178,8 @@ export class AdminService {
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.warehouse_id = @warehouseId
-        AND (@startDate IS NULL OR sd.operation_date >= @startDate)
-        AND (@endDate IS NULL OR sd.operation_date <= @endDate)
+        AND (@startDate IS NULL OR CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE))
+        AND (@endDate IS NULL OR CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE))
         AND u.employee_id != '00000000'
     `;
 
@@ -220,8 +220,8 @@ export class AdminService {
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
         AND u.warehouse_id = @warehouseId
-        AND sd.operation_date >= @startDate
-        AND sd.operation_date <= @endDate
+        AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+        AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
       GROUP BY sd.operation_type, sd.participant_area
       ORDER BY total_amount DESC
     `;
@@ -253,8 +253,8 @@ export class AdminService {
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
         AND u.warehouse_id = @warehouseId
-        AND sd.operation_date >= @startDate
-        AND sd.operation_date <= @endDate
+        AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+        AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
         AND sd.operation_type = @operationType
         AND (sd.participant_area = @participantArea OR (@participantArea = '' AND sd.participant_area IS NULL))
     `;
@@ -284,8 +284,8 @@ export class AdminService {
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.id = @employeeId
         AND u.warehouse_id = @warehouseId
-        AND sd.operation_date >= @startDate
-        AND sd.operation_date <= @endDate
+        AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+        AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
         AND sd.operation_type = @operationType
         AND (sd.participant_area = @participantArea OR (@participantArea = '' AND sd.participant_area IS NULL))
       ORDER BY sd.operation_date DESC
@@ -332,8 +332,8 @@ export class AdminService {
       FROM v_salary_details sd
       INNER JOIN users u ON sd.user_id = u.id
       WHERE u.warehouse_id = @warehouseId
-        AND sd.operation_date >= @startDate
-        AND sd.operation_date <= @endDate
+        AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+        AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
         AND u.employee_id != '00000000'
     `;
     const empParams: any = { warehouseId: targetWarehouseId, startDate, endDate };
@@ -430,8 +430,8 @@ export class AdminService {
         INNER JOIN users u ON sd.user_id = u.id
         WHERE u.id = @employeeId
           AND u.warehouse_id = @warehouseId
-          AND sd.operation_date >= @startDate
-          AND sd.operation_date <= @endDate
+          AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+          AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
         GROUP BY sd.operation_type, sd.participant_area
         ORDER BY total_amount DESC
       `, { employeeId: emp.user_id, warehouseId: targetWarehouseId, startDate, endDate });
@@ -470,8 +470,8 @@ export class AdminService {
           INNER JOIN users u ON sd.user_id = u.id
           WHERE u.id = @employeeId
             AND u.warehouse_id = @warehouseId
-            AND sd.operation_date >= @startDate
-            AND sd.operation_date <= @endDate
+            AND CAST(sd.operation_date AS DATE) >= CAST(@startDate AS DATE)
+            AND CAST(sd.operation_date AS DATE) <= CAST(@endDate AS DATE)
             AND sd.operation_type = @operationType
             AND (sd.participant_area = @participantArea OR (@participantArea = '' AND sd.participant_area IS NULL))
           ORDER BY sd.operation_date DESC

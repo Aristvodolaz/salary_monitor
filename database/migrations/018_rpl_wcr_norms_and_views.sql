@@ -1,12 +1,61 @@
 -- =============================================
--- SalaryMonitor SQL Views
--- Представления для расчета зарплаты
+-- Migration 018: RPL в wcr_norms (amount 0) + views как в repo
+--
+-- 017 сняла RPL1/2/3/5 с wcr_mapping, но не добавила в wcr_norms.
+-- Полный SAP-синк удаляет период и пропускает коды вне
+-- wcr_norms / wcr_picking_norms — строки RPL пропадают.
+-- Сюда: только wcr_norms, без wcr_mapping и без wcr_picking_norms.
+--
+-- Формула без изменений: picking = count × rate; иначе mapped tariff; иначе 0.
 -- =============================================
 
 USE SalaryMonitor;
 GO
 
--- Сначала зависимые представления, иначе DROP v_salary_details падает
+PRINT N'--- 1. RPL не должен быть в wcr_picking_norms ---';
+
+DELETE FROM wcr_picking_norms
+WHERE wcr_code IN (N'RPL1', N'RPL2', N'RPL3', N'RPL5');
+
+PRINT N'  deleted RPL1/RPL2/RPL3/RPL5 from wcr_picking_norms (if any)';
+GO
+
+PRINT N'--- 2. RPL в wcr_norms: Пополнение, amount 0 на синке ---';
+
+-- wcr_norms.norm_type есть (NVARCHAR). Пишем ПМ_Пополнение —
+-- как operation_type в 017, SAP fallback копирует norm_type в operation_type.
+-- В 011 такого ярлыка нет; ближайшие — «Пополнение М1»…«Пополнение М5».
+
+IF NOT EXISTS (SELECT 1 FROM wcr_norms WHERE wcr_code = N'RPL1')
+    INSERT INTO wcr_norms (wcr_code, description, norm_type, norm_value, is_active)
+    VALUES (N'RPL1', N'Пополнение', N'ПМ_Пополнение', NULL, 1);
+
+IF NOT EXISTS (SELECT 1 FROM wcr_norms WHERE wcr_code = N'RPL2')
+    INSERT INTO wcr_norms (wcr_code, description, norm_type, norm_value, is_active)
+    VALUES (N'RPL2', N'Пополнение', N'ПМ_Пополнение', NULL, 1);
+
+IF NOT EXISTS (SELECT 1 FROM wcr_norms WHERE wcr_code = N'RPL3')
+    INSERT INTO wcr_norms (wcr_code, description, norm_type, norm_value, is_active)
+    VALUES (N'RPL3', N'Пополнение', N'ПМ_Пополнение', NULL, 1);
+
+IF NOT EXISTS (SELECT 1 FROM wcr_norms WHERE wcr_code = N'RPL5')
+    INSERT INTO wcr_norms (wcr_code, description, norm_type, norm_value, is_active)
+    VALUES (N'RPL5', N'Пополнение', N'ПМ_Пополнение', NULL, 1);
+
+-- На всякий случай не маппим и не платим: без тарифа, amount = 0
+UPDATE operations
+SET operation_type = N'ПМ_Пополнение',
+    participant_area = N'ПМ',
+    amount = 0,
+    updated_at = GETDATE()
+WHERE wcr_code IN (N'RPL1', N'RPL2', N'RPL3', N'RPL5');
+
+PRINT N'  wcr_norms: RPL1/RPL2/RPL3/RPL5, norm_type=ПМ_Пополнение, norm_value=NULL';
+GO
+
+PRINT N'--- 3. Представления как в database/views.sql (rate не COALESCE) ---';
+
+-- Зависимые сначала, иначе DROP v_salary_details падает
 IF OBJECT_ID('v_operations_stats', 'V') IS NOT NULL DROP VIEW v_operations_stats;
 IF OBJECT_ID('v_top_performers', 'V') IS NOT NULL DROP VIEW v_top_performers;
 IF OBJECT_ID('v_salary_by_month', 'V') IS NOT NULL DROP VIEW v_salary_by_month;
@@ -14,16 +63,9 @@ IF OBJECT_ID('v_salary_by_day', 'V') IS NOT NULL DROP VIEW v_salary_by_day;
 IF OBJECT_ID('v_salary_details', 'V') IS NOT NULL DROP VIEW v_salary_details;
 GO
 
--- =============================================
--- View: Детальный расчет зарплаты по операциям
 -- Комплектация: АЕИ (count) × ставка из wcr_picking_norms
 -- Сортировка / АЕИ: count × ставка из tariffs, только если WCR в wcr_mapping
 -- prod_count хранится, но в деньги не идёт
--- Ккач НЕ применяется на уровне операций
--- =============================================
-IF OBJECT_ID('v_salary_details', 'V') IS NOT NULL DROP VIEW v_salary_details;
-GO
-
 CREATE VIEW v_salary_details AS
 SELECT
     o.id AS operation_id,
@@ -62,16 +104,8 @@ LEFT JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
 WHERE u.is_active = 1;
 GO
 
--- =============================================
--- View: Агрегированная зарплата по дням
--- Применяем Ккач к СУММЕ за день: Итог = Ʃ(АЕИ * Расценка) * Ккач
--- Ккач берется из salary_summary, если нет - используем 1.0
--- =============================================
-IF OBJECT_ID('v_salary_by_day', 'V') IS NOT NULL DROP VIEW v_salary_by_day;
-GO
-
 CREATE VIEW v_salary_by_day AS
-SELECT 
+SELECT
     sd.user_id,
     sd.employee_id,
     sd.fio,
@@ -84,10 +118,10 @@ SELECT
     COALESCE(ss.quality_coefficient, 1.0) AS quality_coefficient,
     SUM(sd.base_amount) * COALESCE(ss.quality_coefficient, 1.0) AS total_amount
 FROM v_salary_details sd
-LEFT JOIN salary_summary ss ON 
-    sd.user_id = ss.user_id 
+LEFT JOIN salary_summary ss ON
+    sd.user_id = ss.user_id
     AND CAST(sd.operation_date AS DATE) BETWEEN ss.period_start AND ss.period_end
-GROUP BY 
+GROUP BY
     sd.user_id,
     sd.employee_id,
     sd.fio,
@@ -97,15 +131,8 @@ GROUP BY
     COALESCE(ss.quality_coefficient, 1.0);
 GO
 
--- =============================================
--- View: Агрегированная зарплата по месяцам
--- Применяем средний Ккач за месяц к СУММЕ: Итог = Ʃ(АЕИ * Расценка) * AVG(Ккач)
--- =============================================
-IF OBJECT_ID('v_salary_by_month', 'V') IS NOT NULL DROP VIEW v_salary_by_month;
-GO
-
 CREATE VIEW v_salary_by_month AS
-SELECT 
+SELECT
     user_id,
     employee_id,
     fio,
@@ -118,9 +145,9 @@ SELECT
     SUM(total_aei) AS total_aei,
     SUM(base_amount) AS base_amount,
     AVG(quality_coefficient) AS avg_quality_coefficient,
-    SUM(total_amount) AS total_amount  -- Уже с учетом Ккач из v_salary_by_day
+    SUM(total_amount) AS total_amount
 FROM v_salary_by_day
-GROUP BY 
+GROUP BY
     user_id,
     employee_id,
     fio,
@@ -130,14 +157,8 @@ GROUP BY
     MONTH(date);
 GO
 
--- =============================================
--- View: Топ сотрудников по зарплате
--- =============================================
-IF OBJECT_ID('v_top_performers', 'V') IS NOT NULL DROP VIEW v_top_performers;
-GO
-
 CREATE VIEW v_top_performers AS
-SELECT 
+SELECT
     user_id,
     employee_id,
     fio,
@@ -146,11 +167,11 @@ SELECT
     COUNT(DISTINCT date) AS work_days,
     SUM(operations_count) AS total_operations,
     SUM(total_aei) AS total_aei,
-    SUM(total_amount) AS total_salary,  -- Уже с учетом Ккач
+    SUM(total_amount) AS total_salary,
     AVG(total_amount) AS avg_daily_salary
 FROM v_salary_by_day
 WHERE date >= DATEADD(MONTH, -1, GETDATE())
-GROUP BY 
+GROUP BY
     user_id,
     employee_id,
     fio,
@@ -158,14 +179,8 @@ GROUP BY
     warehouse_name;
 GO
 
--- =============================================
--- View: Статистика по операциям
--- =============================================
-IF OBJECT_ID('v_operations_stats', 'V') IS NOT NULL DROP VIEW v_operations_stats;
-GO
-
 CREATE VIEW v_operations_stats AS
-SELECT 
+SELECT
     warehouse_code,
     warehouse_name,
     operation_type,
@@ -174,21 +189,14 @@ SELECT
     SUM(aei_count) AS total_aei,
     AVG(aei_count) AS avg_aei_per_operation,
     AVG(rate) AS avg_rate,
-    SUM(base_amount) AS total_amount  -- Без Ккач, т.к. статистика по операциям
+    SUM(base_amount) AS total_amount
 FROM v_salary_details
 WHERE operation_date >= DATEADD(MONTH, -1, GETDATE())
-GROUP BY 
+GROUP BY
     warehouse_code,
     warehouse_name,
     operation_type;
 GO
 
-PRINT 'Views created successfully!';
-PRINT '';
-PRINT 'Available views:';
-PRINT '- v_salary_details: Детальный расчет по операциям';
-PRINT '- v_salary_by_day: Зарплата по дням';
-PRINT '- v_salary_by_month: Зарплата по месяцам';
-PRINT '- v_top_performers: Топ сотрудников';
-PRINT '- v_operations_stats: Статистика по операциям';
-
+PRINT N'✅ Migration 018: RPL in wcr_norms only; picking RPL deleted; views match repo';
+GO
