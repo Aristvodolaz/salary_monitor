@@ -32,6 +32,8 @@ interface NormsEmployee {
   aei_amount: number;
   total_prod: number;
   picking_amount: number;
+  total_packing: number;
+  packing_amount: number;
   total_amount: number;
 }
 
@@ -299,6 +301,7 @@ const NormsPage = () => {
     employees: filtered.length,
     aei_amount:     filtered.reduce((s, e) => s + e.aei_amount, 0),
     picking_amount: filtered.reduce((s, e) => s + e.picking_amount, 0),
+    packing_amount: filtered.reduce((s, e) => s + (e.packing_amount || 0), 0),
     total_amount:   filtered.reduce((s, e) => s + e.total_amount, 0),
   }), [filtered]);
 
@@ -313,7 +316,7 @@ const NormsPage = () => {
       {/* Summary Cards */}
       {!loading && employees.length > 0 && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={6} md={3}>
+          <Grid item xs={6} md={2.4}>
             <Box sx={{ backgroundColor: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 2, p: { xs: 2, md: 2.5 }, height: '100%' }}>
               <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', mb: 1.5 }}>
                 Сотрудников
@@ -323,7 +326,7 @@ const NormsPage = () => {
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={6} md={3}>
+          <Grid item xs={6} md={2.4}>
             <Box sx={{ backgroundColor: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 2, p: { xs: 2, md: 2.5 }, height: '100%' }}>
               <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', mb: 1.5 }}>
                 АЕИ
@@ -333,7 +336,7 @@ const NormsPage = () => {
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={6} md={3}>
+          <Grid item xs={6} md={2.4}>
             <Box sx={{ backgroundColor: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 2, p: { xs: 2, md: 2.5 }, height: '100%' }}>
               <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', mb: 1.5 }}>
                 Комплектация
@@ -343,7 +346,17 @@ const NormsPage = () => {
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={6} md={3}>
+          <Grid item xs={6} md={2.4}>
+            <Box sx={{ backgroundColor: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 2, p: { xs: 2, md: 2.5 }, height: '100%' }}>
+              <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', mb: 1.5 }}>
+                Упаковка
+              </Typography>
+              <Typography sx={{ fontSize: { xs: '1.25rem', md: '1.75rem' }, fontWeight: 700, color: '#8B5CF6', fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
+                {fmt(totals.packing_amount)} ₽
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={6} md={2.4}>
             <Box sx={{ backgroundColor: 'var(--color-bg-surface)', border: '1px solid var(--color-gold)', borderRadius: 2, p: { xs: 2, md: 2.5 }, height: '100%', boxShadow: `0 0 24px ${alpha('#F59E0B', 0.12)}` }}>
               <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-secondary)', mb: 1.5 }}>
                 Итого
@@ -440,15 +453,17 @@ const NormsPage = () => {
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="aei_amount">Сумма АЕИ, ₽</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_prod">АЕИ компл.</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="picking_amount">Сумма компл., ₽</SortLabel></HeaderCell>
+                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_packing">АЕИ упак.</SortLabel></HeaderCell>
+                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="packing_amount">Сумма упак., ₽</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right', color: 'var(--color-gold)' }}><SortLabel col="total_amount">Итого, ₽</SortLabel></HeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
-                <SkeletonRows cols={8} />
+                <SkeletonRows cols={10} />
               ) : sorted.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} sx={{ textAlign: 'center', py: 4, color: 'var(--color-text-secondary)' }}>
+                  <TableCell colSpan={10} sx={{ textAlign: 'center', py: 4, color: 'var(--color-text-secondary)' }}>
                     {employees.length === 0 ? 'Нажмите «Обновить» для получения данных' : 'Ничего не найдено'}
                   </TableCell>
                 </TableRow>
@@ -493,13 +508,19 @@ const NormsPage = () => {
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: '#3B82F6', fontWeight: emp.picking_amount > 0 ? 700 : 400 }}>
                         {emp.picking_amount > 0 ? fmt(emp.picking_amount) : '—'}
                       </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                        {emp.total_packing > 0 ? fmtInt(emp.total_packing) : '—'}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: '#8B5CF6', fontWeight: emp.packing_amount > 0 ? 700 : 400 }}>
+                        {emp.packing_amount > 0 ? fmt(emp.packing_amount) : '—'}
+                      </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                         {fmt(emp.total_amount)}
                       </TableCell>
                     </TableRow>
                     {expandedId === emp.user_id && (
                       <TableRow>
-                        <TableCell colSpan={8} sx={{ p: 0, border: 'none' }}>
+                        <TableCell colSpan={10} sx={{ p: 0, border: 'none' }}>
                           <Box sx={{
                             backgroundColor: alpha('#EF4444', 0.02),
                             borderBottom: `2px solid ${alpha('#EF4444', 0.12)}`,

@@ -1,12 +1,50 @@
 -- =============================================
--- SalaryMonitor SQL Views
--- Представления для расчета зарплаты
+-- Migration 019: отделить "Упаковку" от "Комплектации"
+-- =============================================
+-- Сверка с эталонными файлами «Выработка комплектация» за июнь/июль/август 2026
+-- показала, что приложение завышает сумму комплектации на ~35% относительно
+-- эталона. Причина: коды picking_type = 'Упаковка' (DEF, DEFF, PKM2, PKM3,
+-- PKM4, PKM5, PKMC) суммировались в ту же "Комплектацию", что и настоящая
+-- комплектация (Коробочная/Штучная/Штучн.компл.однострочн) — а в эталонном
+-- своде упаковка не является частью комплектации вообще.
+--
+-- Деньги никуда не делись — count × rate для упаковки остаётся прежним,
+-- просто теперь считается отдельной строкой (как и в эталоне), а не
+-- складывается в "Комплектацию".
+--
+-- Затронуто:
+--   1. norms_employees_snapshot — новые колонки total_packing/packing_amount
+--   2. v_salary_details — is_picking больше не включает Упаковку (is_packing новый)
 -- =============================================
 
 USE SalaryMonitor;
 GO
 
--- Сначала зависимые представления, иначе DROP v_salary_details падает
+PRINT N'--- 1. norms_employees_snapshot: колонки для упаковки ---';
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('norms_employees_snapshot') AND name = 'total_packing'
+)
+BEGIN
+    ALTER TABLE norms_employees_snapshot
+        ADD total_packing INT NOT NULL CONSTRAINT DF_norms_emp_snap_packqty DEFAULT 0;
+    PRINT N'  добавлена total_packing';
+END
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('norms_employees_snapshot') AND name = 'packing_amount'
+)
+BEGIN
+    ALTER TABLE norms_employees_snapshot
+        ADD packing_amount FLOAT NOT NULL CONSTRAINT DF_norms_emp_snap_packamt DEFAULT 0;
+    PRINT N'  добавлена packing_amount';
+END
+GO
+
+PRINT N'--- 2. v_salary_details: is_picking больше не включает Упаковку ---';
+
 IF OBJECT_ID('v_operations_stats', 'V') IS NOT NULL DROP VIEW v_operations_stats;
 IF OBJECT_ID('v_top_performers', 'V') IS NOT NULL DROP VIEW v_top_performers;
 IF OBJECT_ID('v_salary_by_month', 'V') IS NOT NULL DROP VIEW v_salary_by_month;
@@ -14,16 +52,8 @@ IF OBJECT_ID('v_salary_by_day', 'V') IS NOT NULL DROP VIEW v_salary_by_day;
 IF OBJECT_ID('v_salary_details', 'V') IS NOT NULL DROP VIEW v_salary_details;
 GO
 
--- =============================================
--- View: Детальный расчет зарплаты по операциям
--- Комплектация: АЕИ (count) × ставка из wcr_picking_norms
--- Сортировка / АЕИ: count × ставка из tariffs, только если WCR в wcr_mapping
--- prod_count хранится, но в деньги не идёт
--- Ккач НЕ применяется на уровне операций
--- =============================================
-IF OBJECT_ID('v_salary_details', 'V') IS NOT NULL DROP VIEW v_salary_details;
-GO
-
+-- base_amount не меняется (по-прежнему count × rate для всех типов) —
+-- меняется только категоризация is_picking/is_packing.
 CREATE VIEW v_salary_details AS
 SELECT
     o.id AS operation_id,
@@ -63,16 +93,8 @@ LEFT JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
 WHERE u.is_active = 1;
 GO
 
--- =============================================
--- View: Агрегированная зарплата по дням
--- Применяем Ккач к СУММЕ за день: Итог = Ʃ(АЕИ * Расценка) * Ккач
--- Ккач берется из salary_summary, если нет - используем 1.0
--- =============================================
-IF OBJECT_ID('v_salary_by_day', 'V') IS NOT NULL DROP VIEW v_salary_by_day;
-GO
-
 CREATE VIEW v_salary_by_day AS
-SELECT 
+SELECT
     sd.user_id,
     sd.employee_id,
     sd.fio,
@@ -85,10 +107,10 @@ SELECT
     COALESCE(ss.quality_coefficient, 1.0) AS quality_coefficient,
     SUM(sd.base_amount) * COALESCE(ss.quality_coefficient, 1.0) AS total_amount
 FROM v_salary_details sd
-LEFT JOIN salary_summary ss ON 
-    sd.user_id = ss.user_id 
+LEFT JOIN salary_summary ss ON
+    sd.user_id = ss.user_id
     AND CAST(sd.operation_date AS DATE) BETWEEN ss.period_start AND ss.period_end
-GROUP BY 
+GROUP BY
     sd.user_id,
     sd.employee_id,
     sd.fio,
@@ -98,15 +120,8 @@ GROUP BY
     COALESCE(ss.quality_coefficient, 1.0);
 GO
 
--- =============================================
--- View: Агрегированная зарплата по месяцам
--- Применяем средний Ккач за месяц к СУММЕ: Итог = Ʃ(АЕИ * Расценка) * AVG(Ккач)
--- =============================================
-IF OBJECT_ID('v_salary_by_month', 'V') IS NOT NULL DROP VIEW v_salary_by_month;
-GO
-
 CREATE VIEW v_salary_by_month AS
-SELECT 
+SELECT
     user_id,
     employee_id,
     fio,
@@ -119,9 +134,9 @@ SELECT
     SUM(total_aei) AS total_aei,
     SUM(base_amount) AS base_amount,
     AVG(quality_coefficient) AS avg_quality_coefficient,
-    SUM(total_amount) AS total_amount  -- Уже с учетом Ккач из v_salary_by_day
+    SUM(total_amount) AS total_amount
 FROM v_salary_by_day
-GROUP BY 
+GROUP BY
     user_id,
     employee_id,
     fio,
@@ -131,14 +146,8 @@ GROUP BY
     MONTH(date);
 GO
 
--- =============================================
--- View: Топ сотрудников по зарплате
--- =============================================
-IF OBJECT_ID('v_top_performers', 'V') IS NOT NULL DROP VIEW v_top_performers;
-GO
-
 CREATE VIEW v_top_performers AS
-SELECT 
+SELECT
     user_id,
     employee_id,
     fio,
@@ -147,11 +156,11 @@ SELECT
     COUNT(DISTINCT date) AS work_days,
     SUM(operations_count) AS total_operations,
     SUM(total_aei) AS total_aei,
-    SUM(total_amount) AS total_salary,  -- Уже с учетом Ккач
+    SUM(total_amount) AS total_salary,
     AVG(total_amount) AS avg_daily_salary
 FROM v_salary_by_day
 WHERE date >= DATEADD(MONTH, -1, GETDATE())
-GROUP BY 
+GROUP BY
     user_id,
     employee_id,
     fio,
@@ -159,14 +168,8 @@ GROUP BY
     warehouse_name;
 GO
 
--- =============================================
--- View: Статистика по операциям
--- =============================================
-IF OBJECT_ID('v_operations_stats', 'V') IS NOT NULL DROP VIEW v_operations_stats;
-GO
-
 CREATE VIEW v_operations_stats AS
-SELECT 
+SELECT
     warehouse_code,
     warehouse_name,
     operation_type,
@@ -175,21 +178,14 @@ SELECT
     SUM(aei_count) AS total_aei,
     AVG(aei_count) AS avg_aei_per_operation,
     AVG(rate) AS avg_rate,
-    SUM(base_amount) AS total_amount  -- Без Ккач, т.к. статистика по операциям
+    SUM(base_amount) AS total_amount
 FROM v_salary_details
 WHERE operation_date >= DATEADD(MONTH, -1, GETDATE())
-GROUP BY 
+GROUP BY
     warehouse_code,
     warehouse_name,
     operation_type;
 GO
 
-PRINT 'Views created successfully!';
-PRINT '';
-PRINT 'Available views:';
-PRINT '- v_salary_details: Детальный расчет по операциям';
-PRINT '- v_salary_by_day: Зарплата по дням';
-PRINT '- v_salary_by_month: Зарплата по месяцам';
-PRINT '- v_top_performers: Топ сотрудников';
-PRINT '- v_operations_stats: Статистика по операциям';
-
+PRINT N'✅ Migration 019: Упаковка отделена от Комплектации (is_packing, total_packing/packing_amount); base_amount не изменился';
+GO

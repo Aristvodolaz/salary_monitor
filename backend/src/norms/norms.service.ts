@@ -34,6 +34,10 @@ export interface NormsEmployee {
   aei_amount: number;
   total_prod: number;
   picking_amount: number;
+  /** Упаковка (wcr_picking_norms.picking_type = 'Упаковка') — отдельно от комплектации,
+   *  т.к. официальный свод «Выработка комплектация» упаковку не включает. */
+  total_packing: number;
+  packing_amount: number;
   total_amount: number;
 }
 
@@ -351,15 +355,19 @@ export class NormsService {
         ins.input('aei_amount', sql.Float, row.aei_amount);
         ins.input('total_prod', sql.Int, row.total_prod);
         ins.input('picking_amount', sql.Float, row.picking_amount);
+        ins.input('total_packing', sql.Int, row.total_packing ?? 0);
+        ins.input('packing_amount', sql.Float, row.packing_amount ?? 0);
         ins.input('total_amount', sql.Float, row.total_amount);
 
         await ins.query(`
           INSERT INTO norms_employees_snapshot (
             period_start, period_end, warehouse_id, user_id, employee_id, fio,
-            work_days, total_aei, aei_amount, total_prod, picking_amount, total_amount
+            work_days, total_aei, aei_amount, total_prod, picking_amount,
+            total_packing, packing_amount, total_amount
           ) VALUES (
             @period_start, @period_end, @warehouse_id, @user_id, @employee_id, @fio,
-            @work_days, @total_aei, @aei_amount, @total_prod, @picking_amount, @total_amount
+            @work_days, @total_aei, @aei_amount, @total_prod, @picking_amount,
+            @total_packing, @packing_amount, @total_amount
           )
         `);
       }
@@ -386,7 +394,13 @@ export class NormsService {
 
   /**
    * Список сотрудников с заработком по операциям из wcr_norms и wcr_picking_norms.
-   * АЕИ приёмки и АЕИ комплектации показаны отдельно; комплектация = count × rate.
+   * АЕИ приёмки, комплектация и упаковка показаны отдельно.
+   *
+   * Упаковка (wcr_picking_norms.picking_type = 'Упаковка': DEF/DEFF/PKM2/PKM3/PKM4/PKM5/PKMC)
+   * исключена из "Комплектация" — официальный свод «Выработка комплектация» её не включает
+   * (сверка с эталонными файлами за июнь-август 2026 показала расхождение ~35%, полностью
+   * объяснявшееся именно этим — см. обсуждение). Деньги за упаковку никуда не делись,
+   * просто считаются отдельной строкой, как и в эталоне.
    */
   async getNormsEmployees(
     warehouseId: number,
@@ -405,13 +419,19 @@ export class NormsService {
                                                                  AS total_aei,
         ISNULL(SUM(CASE WHEN wn.wcr_code IS NOT NULL THEN o.amount ELSE 0 END), 0)
                                                                  AS aei_amount,
-        -- Блок 2: Комплектация (wcr_picking_norms) — count × rate
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL THEN ISNULL(o.count, 0) ELSE 0 END), 0)
+        -- Блок 2: Комплектация (wcr_picking_norms, picking_type <> 'Упаковка') — count × rate
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type <> N'Упаковка' THEN ISNULL(o.count, 0) ELSE 0 END), 0)
                                                                  AS total_prod,
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.rate IS NOT NULL
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type <> N'Упаковка' AND wp.rate IS NOT NULL
                         THEN ISNULL(o.count, 0) * wp.rate ELSE 0 END), 0)
                                                                  AS picking_amount,
-        -- Итого
+        -- Блок 3: Упаковка (wcr_picking_norms, picking_type = 'Упаковка') — count × rate
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type = N'Упаковка' THEN ISNULL(o.count, 0) ELSE 0 END), 0)
+                                                                 AS total_packing,
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type = N'Упаковка' AND wp.rate IS NOT NULL
+                        THEN ISNULL(o.count, 0) * wp.rate ELSE 0 END), 0)
+                                                                 AS packing_amount,
+        -- Итого (не изменилось — сумма всех трёх блоков)
         ISNULL(SUM(CASE WHEN wn.wcr_code IS NOT NULL THEN o.amount ELSE 0 END), 0) +
         ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.rate IS NOT NULL
                         THEN ISNULL(o.count, 0) * wp.rate ELSE 0 END), 0)
