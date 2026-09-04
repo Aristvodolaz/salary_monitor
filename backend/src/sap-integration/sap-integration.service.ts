@@ -556,8 +556,8 @@ export class SapIntegrationService {
         `SELECT id FROM warehouses WHERE code = @code`,
         { code: warehouseCode },
       ),
-      this.db.query<{ employee_id: string; id: number }>(
-        `SELECT id, employee_id FROM users`,
+      this.db.query<{ employee_id: string; id: number; is_active: boolean }>(
+        `SELECT id, employee_id, is_active FROM users`,
       ),
       this.db.query<{ personnel_number: string; rsrc: string; lgnum: string }>(
         `SELECT personnel_number, rsrc, lgnum
@@ -597,8 +597,25 @@ export class SapIntegrationService {
       }
     }
 
+    // Дубли: одному табельному номеру иногда соответствуют две строки users
+    // (напр. employee_id "85760" и "00085760" с разными id — легаси до появления
+    // sap_employees). Без явного приоритета Map.set() отдаёт "последнюю по
+    // порядку из SELECT" строку, а порядок не гарантирован — операции могли
+    // молча уйти на неактивного дубля и пропасть из всех отчётов (WHERE is_active=1).
+    // Сортируем так, чтобы активная строка обрабатывалась последней и всегда
+    // побеждала при столкновении нормализованных id.
+    const usersActiveLast = [...users].sort((a, b) => Number(a.is_active) - Number(b.is_active));
+    const seenNorm = new Map<string, { id: number; is_active: boolean }>();
     const usersByNorm = new Map<string, number>();
-    for (const u of users) {
+    for (const u of usersActiveLast) {
+      const norm = this.normalizeId(u.employee_id);
+      const prev = seenNorm.get(norm);
+      if (prev && prev.id !== u.id) {
+        this.logger.warn(
+          `   ⚠️  Дубль users по табельному ${norm}: id=${prev.id}(active=${prev.is_active}) и id=${u.id}(active=${u.is_active}) — используем активную запись`,
+        );
+      }
+      seenNorm.set(norm, { id: u.id, is_active: u.is_active });
       this.addLookupKeys(usersByNorm, u.employee_id, u.id);
     }
 
@@ -1022,11 +1039,14 @@ export class SapIntegrationService {
       `SELECT id, code FROM warehouses`,
     );
     const warehouseByCode = new Map(warehouses.map((w) => [w.code, w.id]));
-    const users = await this.db.query<{ id: number; employee_id: string }>(
-      `SELECT id, employee_id FROM users`,
+    const users = await this.db.query<{ id: number; employee_id: string; is_active: boolean }>(
+      `SELECT id, employee_id, is_active FROM users`,
     );
+    // Та же логика, что в buildSyncContext: при дублирующихся employee_id
+    // (padded/unpadded легаси-записи одного человека) активная строка должна
+    // побеждать детерминированно, а не зависеть от порядка выборки.
     const userByNorm = new Map<string, { id: number; employee_id: string }>();
-    for (const u of users) {
+    for (const u of [...users].sort((a, b) => Number(a.is_active) - Number(b.is_active))) {
       userByNorm.set(this.normalizeId(u.employee_id), u);
     }
 
