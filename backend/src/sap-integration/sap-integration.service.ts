@@ -682,21 +682,54 @@ export class SapIntegrationService {
     idx: number,
     total: number,
   ): Promise<any[]> {
-    const filter = this.buildODataFilter(warehouseCode, chunk.startDate, chunk.endDate);
-    const url    = `/WHOSet?${filter}&$format=json`;
-    const label  = `Окно ${idx + 1}/${total} [${warehouseCode}] ` +
-                   `${chunk.startDate.toISOString().slice(0, 10)}`;
+    const filter    = this.buildODataFilter(warehouseCode, chunk.startDate, chunk.endDate);
+    const firstUrl  = `/WHOSet?${filter}&$format=json`;
+    const label     = `Окно ${idx + 1}/${total} [${warehouseCode}] ` +
+                       `${chunk.startDate.toISOString().slice(0, 10)}`;
 
-    return this.withRetry(
-      async () => {
-        this.logger.log(`   🔗 Запрос: ${this.axiosInstance.defaults.baseURL}${url}`);
-        const resp  = await this.axiosInstance.get(url, { timeout: 180_000 });
-        const items = resp.data?.d?.results || [];
-        this.logger.log(`   📡 ${label} → ${items.length} записей`);
-        return items;
-      },
-      { label, maxAttempts: 3 },
-    );
+    // OData V2 (SAP Gateway, d.results/d.__next) — по умолчанию сервис отдаёт
+    // ограниченную страницу (обычно ~100 записей) и молча обрезает остальное,
+    // если не идти по __next. На днях с высокой активностью склада это теряло
+    // большинство записей без единого сообщения об ошибке — раньше проверялось
+    // только на count(items)===0, что не отличить от "страница неполная".
+    const items: any[] = [];
+    let url: string | null = firstUrl;
+    let page = 0;
+
+    while (url) {
+      page += 1;
+      const pageUrl: string = url;
+      const pageLabel = page === 1 ? label : `${label} (стр. ${page})`;
+
+      const pageResult = await this.withRetry(
+        async () => {
+          this.logger.log(`   🔗 Запрос: ${this.axiosInstance.defaults.baseURL}${pageUrl}`);
+          const resp = await this.axiosInstance.get(pageUrl, { timeout: 180_000 });
+          const pageItems = resp.data?.d?.results || [];
+          const next = resp.data?.d?.__next as string | undefined;
+          this.logger.log(`   📡 ${pageLabel} → ${pageItems.length} записей${next ? ' (есть ещё страницы)' : ''}`);
+          return { pageItems, next };
+        },
+        { label: pageLabel, maxAttempts: 3 },
+      );
+
+      for (const item of pageResult.pageItems) items.push(item);
+
+      if (!pageResult.next) {
+        url = null;
+      } else if (pageResult.next.startsWith('http')) {
+        url = pageResult.next;
+      } else {
+        // __next обычно относительный путь от baseURL сервиса
+        url = pageResult.next.startsWith('/') ? pageResult.next : `/${pageResult.next}`;
+      }
+    }
+
+    if (page > 1) {
+      this.logger.log(`   📚 ${label}: собрано ${page} страниц, итого ${items.length} записей`);
+    }
+
+    return items;
   }
 
   /**
