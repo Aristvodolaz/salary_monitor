@@ -1,0 +1,250 @@
+{
+  "generatedAt": "2026-09-01T12:40:00.000Z",
+  "sourceOfTruth": "Свод для ЗП",
+  "excelFile": "Выработка комплектация.xlsx",
+  "warehouse": "02DQ",
+  "period": "2026-07",
+  "qtyField": "operations.count (AEI), not prod_count",
+  "overall": "FAIL",
+  "overallReason": "Миграция 017 в БД применена (формула count×rate, справочники, RPL=0). Июль 02DQ полностью отсутствует: failed sync_logs id=5372 getaddrinfo ENOTFOUND pwm.komus.net, records_processed=0. Сверка 34 человек невозможна до восстановления.",
+  "checks": {
+    "person100022": "FAIL_DATA_WIPED",
+    "people34": "FAIL_02DQ_JULY_EMPTY",
+    "totals": "FAIL_02DQ_JULY_EMPTY",
+    "rpl": "PASS",
+    "newWcrsInDict": "PASS",
+    "newWcrsJulyOps": "MISSING_UNTIL_RESYNC",
+    "viewVsOps": "PASS",
+    "formulaCountNotProd": "PASS"
+  },
+  "person100022": {
+    "excelName": "BAYYSH K.S.",
+    "employee_id": "00100022",
+    "user_id": 568,
+    "fio": "БАЙЫШ КЫЗЫ САЙКАЛ .",
+    "excelQty": 141735,
+    "expectedQty": 141735,
+    "expectedAmt": 166084.5,
+    "impliedExcelAmt": 166084.5,
+    "impliedAmtNote": "Свод qty × текущие wcr_picking_norms; совпадает с ожидаемыми 166084.50",
+    "dbAei02dqNow": 0,
+    "dbAmt02dqNow": 0,
+    "preWipe": {
+      "source": "backend/scripts/_july-findings.json before sync 5372",
+      "dbCountAei": 141735,
+      "dbProdCount": 13443,
+      "dbAmountOldProdFormula": 16008.7,
+      "qtyMatchedExcel": true
+    },
+    "qtyPassNow": false,
+    "amtPassNow": false,
+    "qtyWouldPassIfRestored": true
+  },
+  "people34": {
+    "excelPeople": 34,
+    "excelQty": 1159446,
+    "dbAeiNow": 0,
+    "dbAmtNow": 0,
+    "dbNNow": 0,
+    "exactMatchesNow": 0,
+    "deffOnlyGapsNow": 0,
+    "otherDeltasNow": 34,
+    "note": "Сейчас у всех 34 db AEI=0 из-за пустого июля 02DQ. Ниже — Excel-разрез и снимок до wipe.",
+    "preWipe02dq": {
+      "excelSvodQty": 1159446,
+      "dbPickingAei": 1032230,
+      "dbPickingProd": 201228,
+      "excelWithoutMissingWcrs": 1031146,
+      "aeiVsExcelKnownDelta": 1084,
+      "exactAeiPeople": 20,
+      "exactAfterRemoveDEFF": 25,
+      "remainingAbsDeltaAfterDEFF": 4393
+    },
+    "excelDeffPeople": [
+      { "pers": "85916", "name": "LOGINOVSKAYA E. B.", "excelQty": 39726, "excelDeff": 24837 },
+      { "pers": "85760", "name": "KANISHCHEVA S. N.", "excelQty": 50504, "excelDeff": 24018 },
+      { "pers": "77099", "name": "YEVSTIGNEYEVA L.Y.", "excelQty": 47148, "excelDeff": 23821 },
+      { "pers": "92118", "name": "MALININA V. S.", "excelQty": 43808, "excelDeff": 23373 },
+      { "pers": "80792", "name": "MILLER O. V.", "excelQty": 32011, "excelDeff": 18943 },
+      { "pers": "92133", "name": "NESTERENKO E. N.", "excelQty": 36187, "excelDeff": 9984 },
+      { "pers": "86717", "name": "SHUMENKO A. A.", "excelQty": 1017, "excelDeff": 5 },
+      { "pers": "91959", "name": "NOOKENBAEVA C. A.", "excelQty": 2086, "excelDeff": 4, "excelP3bPhsm": 3 }
+    ],
+    "excelP3bPhsmPeople": [
+      { "pers": "90888", "name": "ZHOLDOSHOVA M. B.", "excelQty": 27182, "excelP3bPhsm": 1182 },
+      { "pers": "101444", "name": "NIKOTIN S.V.", "excelQty": 9868, "excelP3bPhsm": 1077 },
+      { "pers": "100116", "name": "SURKOVA T.D.", "excelQty": 23678, "excelP3bPhsm": 504 },
+      { "pers": "105095", "name": "SHAKIRBAYEVA A.Z.", "excelQty": 14186, "excelP3bPhsm": 492 },
+      { "pers": "86803", "name": "LAYER A. A.", "excelQty": 11928, "excelP3bPhsm": 33 },
+      { "pers": "98670", "name": "BAYMURATOV U.T.", "excelQty": 9331, "excelP3bPhsm": 24 },
+      { "pers": "91959", "name": "NOOKENBAEVA C. A.", "excelQty": 2086, "excelP3bPhsm": 3 }
+    ],
+    "excelAll34": [
+      { "pers": "100022", "name": "BAYYSH K.S.", "excelQty": 141735, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "95521", "name": "KOZLOVA G.M.", "excelQty": 81474, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "100481", "name": "KARIMOVA I.V.", "excelQty": 77638, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "99616", "name": "GULYAYEVA YU.YU.", "excelQty": 57478, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "96204", "name": "MAMYRBEKOVA N.M.", "excelQty": 56420, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "84310", "name": "KANCHURINA F. B.", "excelQty": 56128, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "85760", "name": "KANISHCHEVA S. N.", "excelQty": 50504, "excelDeff": 24018, "excelP3bPhsm": 0 },
+      { "pers": "80976", "name": "KUZOVKOVA O. V.", "excelQty": 49082, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "77099", "name": "YEVSTIGNEYEVA L.Y.", "excelQty": 47148, "excelDeff": 23821, "excelP3bPhsm": 0 },
+      { "pers": "100198", "name": "FOMINA A.A.", "excelQty": 46604, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "79442", "name": "MISYULYA E. I.", "excelQty": 46567, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "76947", "name": "POTAPOVA T. V.", "excelQty": 45549, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "92118", "name": "MALININA V. S.", "excelQty": 43808, "excelDeff": 23373, "excelP3bPhsm": 0 },
+      { "pers": "85916", "name": "LOGINOVSKAYA E. B.", "excelQty": 39726, "excelDeff": 24837, "excelP3bPhsm": 0 },
+      { "pers": "92133", "name": "NESTERENKO E. N.", "excelQty": 36187, "excelDeff": 9984, "excelP3bPhsm": 0 },
+      { "pers": "88619", "name": "SAPRYKINA S. Z.", "excelQty": 35006, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "74506", "name": "MAKAROVA E. N.", "excelQty": 32137, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "80792", "name": "MILLER O. V.", "excelQty": 32011, "excelDeff": 18943, "excelP3bPhsm": 0 },
+      { "pers": "90888", "name": "ZHOLDOSHOVA M. B.", "excelQty": 27182, "excelDeff": 0, "excelP3bPhsm": 1182 },
+      { "pers": "100116", "name": "SURKOVA T.D.", "excelQty": 23678, "excelDeff": 0, "excelP3bPhsm": 504 },
+      { "pers": "100025", "name": "MEDEROVA K.", "excelQty": 19347, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "92653", "name": "SOKOLOVA S. N.", "excelQty": 14890, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "105095", "name": "SHAKIRBAYEVA A.Z.", "excelQty": 14186, "excelDeff": 0, "excelP3bPhsm": 492 },
+      { "pers": "100835", "name": "SMIRNOV A.A.", "excelQty": 13274, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "94235", "name": "STOYAKIN A. V.", "excelQty": 12511, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "86803", "name": "LAYER A. A.", "excelQty": 11928, "excelDeff": 0, "excelP3bPhsm": 33 },
+      { "pers": "11031", "name": "LUTOSHKIN M. V.", "excelQty": 11553, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "101444", "name": "NIKOTIN S.V.", "excelQty": 9868, "excelDeff": 0, "excelP3bPhsm": 1077 },
+      { "pers": "98670", "name": "BAYMURATOV U.T.", "excelQty": 9331, "excelDeff": 0, "excelP3bPhsm": 24 },
+      { "pers": "44591", "name": "TRIFONOV N. E.", "excelQty": 8941, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "100474", "name": "BOGDANOVA YE.N.", "excelQty": 4425, "excelDeff": 0, "excelP3bPhsm": 0 },
+      { "pers": "91959", "name": "NOOKENBAEVA C. A.", "excelQty": 2086, "excelDeff": 4, "excelP3bPhsm": 3 },
+      { "pers": "86717", "name": "SHUMENKO A. A.", "excelQty": 1017, "excelDeff": 5, "excelP3bPhsm": 0 },
+      { "pers": "64694", "name": "TUPELEKIN D. A.", "excelQty": 27, "excelDeff": 0, "excelP3bPhsm": 0 }
+    ]
+  },
+  "totals": {
+    "excelSvodQty": 1159446,
+    "excelQtyInNorms": 1159446,
+    "excelQtyUnknown": 0,
+    "unknownWcrs": {},
+    "excelImpliedAmt": 2564322.9,
+    "excelImpliedAmtBreakdown": {
+      "knownBefore017newWcrs": 2029474.4,
+      "deff_124985_x_4.1": 512438.5,
+      "p3bl_2868_x_6.8": 19502.4,
+      "p3bm_411_x_6.8": 2794.8,
+      "p3bs_3_x_6.8": 20.4,
+      "phsm_33_x_2.8": 92.4
+    },
+    "dbAei34_02dq_now": 0,
+    "dbAmt34_02dq_now": 0,
+    "dbAeiAll02dqPickingNow": 0,
+    "july02dqOperationsNow": 0,
+    "preWipeDbPickingAei34": 1032230,
+    "excelMissingFamilyQty": 128300,
+    "excelDeffQty": 124985,
+    "excelP3bPhsmQty": 3315,
+    "deltaAeiVsSvodNow": -1159446
+  },
+  "rpl": {
+    "inWcrMapping": [],
+    "notInMapping": true,
+    "julyRemainingWarehouses": [
+      { "wcr": "RPL1", "n": 5837, "aei": 39379, "amt": 0, "operation_type": "ПМ_Пополнение" },
+      { "wcr": "RPL2", "n": 12579, "aei": 244697, "amt": 0, "operation_type": "ПМ_Пополнение" },
+      { "wcr": "RPL3", "n": 49, "aei": 2616, "amt": 0, "operation_type": "ПМ_Пополнение" }
+    ],
+    "rpl5JulyOps": 0,
+    "amountAllZero": true,
+    "note": "RPL1/2/3/5 нет в wcr_mapping. amount=0, type=ПМ_Пополнение. RPL5 в оставшемся июле нет (скорее всего был на 02DQ)."
+  },
+  "dictionaries": {
+    "deffP3bPhsmInMapping": true,
+    "deffP3bPhsmInPickingNorms": true,
+    "mapping": [
+      { "wcr_code": "DEFF", "operation_type": "ПМ_Упаковка", "participant_area": "ПМ", "is_active": true },
+      { "wcr_code": "P3BL", "operation_type": "М3_Штучная комплектация", "participant_area": "М3", "is_active": true },
+      { "wcr_code": "P3BM", "operation_type": "М3_Штучная комплектация", "participant_area": "М3", "is_active": true },
+      { "wcr_code": "P3BS", "operation_type": "М3_Штучная комплектация", "participant_area": "М3", "is_active": true },
+      { "wcr_code": "PHSM", "operation_type": "ФС_Штучная комплектация", "participant_area": "ФС", "is_active": true }
+    ],
+    "pickingNorms": [
+      { "wcr_code": "DEFF", "norm_label": "ПМ_Упаковка", "rate": 4.1, "is_active": true },
+      { "wcr_code": "P3BL", "norm_label": "М3_Штучная комплектация", "rate": 6.8, "is_active": true },
+      { "wcr_code": "P3BM", "norm_label": "М3_Штучная комплектация", "rate": 6.8, "is_active": true },
+      { "wcr_code": "P3BS", "norm_label": "М3_Штучная комплектация", "rate": 6.8, "is_active": true },
+      { "wcr_code": "PHSM", "norm_label": "ФС_Штучная комплектация", "rate": 2.8, "is_active": true }
+    ]
+  },
+  "newWcrJulyOps": {
+    "DEFF": { "n": 0, "aei": 0, "amt": 0 },
+    "P3BL": { "n": 0, "aei": 0, "amt": 0 },
+    "P3BM": { "n": 0, "aei": 0, "amt": 0 },
+    "P3BS": { "n": 0, "aei": 0, "amt": 0 },
+    "PHSM": { "n": 0, "aei": 0, "amt": 0 }
+  },
+  "view": {
+    "usesCountTimesPickingRate": true,
+    "usesProdCountForPicking": false,
+    "formulaSnippet": "WHEN wp.wcr_code IS NOT NULL THEN CAST(ISNULL(o.count, 0) AS FLOAT) * ISNULL(wp.rate, 0)",
+    "julyPickingMismatchesVsOps": 0,
+    "spotCheckOtherWarehouses": [
+      { "id": 12577675, "wcr": "PS1L", "wh": "0SK5", "count": 2526, "prod_count": 57, "op_amount": 7072.8, "view_base": 7072.8, "count_x_rate": 7072.8, "match": true },
+      { "id": 12580945, "wcr": "PS1L", "wh": "0SK5", "count": 2048, "prod_count": 38, "op_amount": 5734.4, "view_base": 5734.4, "count_x_rate": 5734.4, "match": true },
+      { "id": 12578378, "wcr": "PS1L", "wh": "0SK5", "count": 1457, "prod_count": 67, "op_amount": 4079.6, "view_base": 4079.6, "count_x_rate": 4079.6, "match": true },
+      { "id": 12580430, "wcr": "PS1L", "wh": "0SK5", "count": 1430, "prod_count": 74, "op_amount": 4004.0, "view_base": 4004.0, "count_x_rate": 4004.0, "match": true },
+      { "id": 12578704, "wcr": "PS1L", "wh": "0SK5", "count": 1299, "prod_count": 45, "op_amount": 3637.2, "view_base": 3637.2, "count_x_rate": 3637.2, "match": true }
+    ]
+  },
+  "formulaCheck": {
+    "july02dqPickingRows": 0,
+    "julyOtherWhPickingRows": 4727,
+    "julyOtherWhAmountEqualsCountXrate": 4727,
+    "julyOtherWhAmountEqualsProdXrate": 2158,
+    "june02dqPickingRows": 49060,
+    "june02dqAmountEqualsCountXrate": 49060,
+    "june02dqPickingAei": 996682,
+    "june02dqPickingAmt": 1982323.7,
+    "person100022June02dq": { "n": 1811, "aei": 59844, "amt": 70364.2 }
+  },
+  "dataWipe": {
+    "july02dqOperations": 0,
+    "other02dqMonthsPresent": [1, 2, 3, 4, 5, 6, 8],
+    "failedSync": {
+      "id": 5372,
+      "warehouse_code": "02DQ",
+      "sync_start": "2026-09-01T17:30:29.813",
+      "sync_end": "2026-09-01T17:30:45.353",
+      "status": "failed",
+      "records_processed": 0,
+      "error_message": "getaddrinfo ENOTFOUND pwm.komus.net"
+    },
+    "mechanism": "syncWarehouse DELETE периода, затем SAP fetch. DNS pwm.komus.net с этой машины не резолвится → июль 02DQ удалён, не восстановлен.",
+    "doNotRetryFromThisWorkstation": true
+  },
+  "resync": {
+    "ranFromThisSession": false,
+    "reason": "Локально pwm.komus.net ENOTFOUND; syncWarehouse сначала DELETE. Повтор с этой машины снова оставит 02DQ пустым. Нужен сервер приложения.",
+    "afterDeployOnAppServer": {
+      "serverRoot": "/home/admin-lc/salary_monitor",
+      "pm2": "salary-monitor-backend",
+      "api": "http://127.0.0.1:3015",
+      "preferred02dqOnly": "HTTP на один склад нет. На сервере (где резолвится pwm.komus.net), после git pull + npm run build + pm2 restart, вызвать SapIntegrationService.syncWarehouseManual('02DQ', new Date('2026-07-01'), new Date('2026-07-31T23:59:59.999Z')). Это DELETE июля 02DQ (уже пусто) + 31 дневной чанк SAP. Не прерывать. Другие склады не трогает.",
+      "allWarehousesApi": "curl -X POST http://127.0.0.1:3015/api/sap/sync-period -H 'Content-Type: application/json' -H 'Authorization: Bearer ADMIN_JWT' -d '{\"start\":\"2026-07-01\",\"end\":\"2026-07-31\"}'",
+      "allWarehousesWarning": "sync-period удаляет и перезаливает ИЮЛЬ ВСЕХ складов. 0SK5/01SS/02SR и т.д. июль ещё на месте — не используйте, если SAP может оборваться. Только 02DQ безопаснее.",
+      "normsSync": "POST /api/norms/sync {\"startDate\":\"2026-07-01\",\"endDate\":\"2026-07-31\"} — тоже DELETE норм-операций по всем складам, долго, не для точечного 02DQ.",
+      "backupOption": "Если есть бэкап SalaryMonitor после 017 и до sync 5372 — восстановить operations 02DQ июля быстрее, чем SAP. Затем всё равно нужен re-sync, чтобы подтянуть DEFF/P3B*/PHSM."
+    }
+  },
+  "productionReady": {
+    "formulaAndDicts": true,
+    "july02dqDataComplete": false,
+    "validToPayJuly02dq": false,
+    "note": "Код/формула/справочники 017 готовы. Июльскую ЗП 02DQ платить нельзя: операций нет. После восстановления 02DQ ожидаются DEFF-only расхождения (~124985 АЕИ, 8 человек) и P3B*/PHSM (~3315), пока SAP не отдаст эти WCR."
+  },
+  "afterGitPush": {
+    "migration017AlreadyAppliedOnThisDb": true,
+    "steps": [
+      "cd /home/admin-lc/salary_monitor && git pull",
+      "cd backend && npm run build && pm2 restart salary-monitor-backend",
+      "cd ../frontend && npm run build  (если фронт менялся)",
+      "Миграцию 017 на этом SalaryMonitor НЕ гонять повторно — уже применена (DEFF/P3B*/PHSM в словарях, RPL unmapped, views на count).",
+      "Восстановить июль 02DQ ТОЛЬКО с сервера, где резолвится pwm.komus.net, методом syncWarehouseManual('02DQ', 2026-07-01..2026-07-31).",
+      "После sync: SUM(count) Байыш 00100022 = 141735, amount ≈ 166084.50; свод 1159446 vs DB; DEFF/P3B* строки появятся."
+    ]
+  }
+}

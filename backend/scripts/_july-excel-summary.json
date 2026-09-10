@@ -1,0 +1,441 @@
+{
+  "sheets": {
+    "Свод для ЗП": {
+      "rows": 396,
+      "qty": 1159446,
+      "people": 34,
+      "wcrCount": 44,
+      "wcrs": [
+        "DEFF",
+        "P2M2",
+        "P2M4",
+        "P2M5",
+        "P2MC",
+        "P3BL",
+        "P3BM",
+        "P3BS",
+        "PCD1",
+        "PCD2",
+        "PHSM",
+        "PKM2",
+        "PKM4",
+        "PKM5",
+        "PKMC",
+        "PM11",
+        "PM12",
+        "PM21",
+        "PM22",
+        "PM31",
+        "PM32",
+        "PM41",
+        "PM42",
+        "PM51",
+        "PM52",
+        "PMC1",
+        "PMC2",
+        "PMT4",
+        "PPM2",
+        "PPM3",
+        "PPM4",
+        "PPM5",
+        "PPMC",
+        "PS3L",
+        "PS3M",
+        "PS3S",
+        "PSCD",
+        "PSCL",
+        "PSST",
+        "PST1",
+        "PST2",
+        "PSTT",
+        "PZCD",
+        "PZST"
+      ],
+      "headers": [
+        "Правило созд. склад. заказов",
+        "Ресурс",
+        "Табельный номер",
+        "Имя 1/Фамилия",
+        "Имя 2/Имя",
+        "Дата подтверждения",
+        "Сумма по полю Суммарное кол-во АЕИ в продуктовых задач",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "dateMin": "2026-07-01",
+      "dateMax": "2026-07-01",
+      "dateCount": 1,
+      "datesSample": [
+        "2026-07-01"
+      ]
+    },
+    "Лист1": {
+      "rows": 340,
+      "qty": 650781,
+      "people": 34,
+      "wcrCount": 47,
+      "wcrs": [
+        "DEF",
+        "IN02",
+        "IN03",
+        "P2M2",
+        "P2M4",
+        "P2M5",
+        "P2MC",
+        "P3BL",
+        "P3BM",
+        "P3BS",
+        "PCD1",
+        "PCD2",
+        "PHSM",
+        "PM11",
+        "PM12",
+        "PM21",
+        "PM22",
+        "PM31",
+        "PM32",
+        "PM41",
+        "PM42",
+        "PM51",
+        "PM52",
+        "PMC1",
+        "PMC2",
+        "PMT4",
+        "PPM2",
+        "PPM3",
+        "PPM4",
+        "PPM5",
+        "PPMC",
+        "PS3L",
+        "PS3M",
+        "PS3S",
+        "PSCD",
+        "PSCL",
+        "PSST",
+        "PST1",
+        "PST2",
+        "PSTT",
+        "PU02",
+        "PZCD",
+        "PZST",
+        "RPL1",
+        "RPL2",
+        "RPL5",
+        "UNDE"
+      ],
+      "headers": [
+        "Правило созд. склад. заказов",
+        "Ресурс",
+        "Табельный номер",
+        "Имя 1/Фамилия",
+        "Имя 2/Имя",
+        "Дата подтверждения",
+        "Сумма по полю Суммарное кол-во АЕИ в продуктовых задач",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "dateMin": "2026-07-01",
+      "dateMax": "2026-07-01",
+      "dateCount": 1,
+      "datesSample": [
+        "2026-07-01"
+      ]
+    },
+    "Data": {
+      "rows": 8571,
+      "qty": 650781,
+      "people": 34,
+      "wcrCount": 47,
+      "wcrs": [
+        "DEF",
+        "IN02",
+        "IN03",
+        "P2M2",
+        "P2M4",
+        "P2M5",
+        "P2MC",
+        "P3BL",
+        "P3BM",
+        "P3BS",
+        "PCD1",
+        "PCD2",
+        "PHSM",
+        "PM11",
+        "PM12",
+        "PM21",
+        "PM22",
+        "PM31",
+        "PM32",
+        "PM41",
+        "PM42",
+        "PM51",
+        "PM52",
+        "PMC1",
+        "PMC2",
+        "PMT4",
+        "PPM2",
+        "PPM3",
+        "PPM4",
+        "PPM5",
+        "PPMC",
+        "PS3L",
+        "PS3M",
+        "PS3S",
+        "PSCD",
+        "PSCL",
+        "PSST",
+        "PST1",
+        "PST2",
+        "PSTT",
+        "PU02",
+        "PZCD",
+        "PZST",
+        "RPL1",
+        "RPL2",
+        "RPL5",
+        "UNDE"
+      ],
+      "headers": [
+        "Правило созд. склад. заказов",
+        "Ресурс",
+        "Табельный номер",
+        "Имя 1/Фамилия",
+        "Имя 2/Имя",
+        "Дата подтверждения",
+        "Суммарное кол-во АЕИ в продуктовых задач",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "dateMin": "2026-07-01",
+      "dateMax": "2026-07-01",
+      "dateCount": 1,
+      "datesSample": [
+        "2026-07-01"
+      ]
+    }
+  },
+  "extraWcrSvodVsData": [
+    "DEFF",
+    "PKM2",
+    "PKM4",
+    "PKM5",
+    "PKMC"
+  ],
+  "extraWcrDataVsSvod": [
+    "DEF",
+    "IN02",
+    "IN03",
+    "PU02",
+    "RPL1",
+    "RPL2",
+    "RPL5",
+    "UNDE"
+  ],
+  "extraPeopleSvod": [
+    "64694"
+  ],
+  "extraPeopleDataCount": 1,
+  "extraPeopleData": [
+    "0"
+  ],
+  "topWcrSvodVsData": [
+    {
+      "wcr": "PKM5",
+      "svod": 133908,
+      "data": 0,
+      "list1": 0,
+      "deltaSvodData": 133908
+    },
+    {
+      "wcr": "DEFF",
+      "svod": 124985,
+      "data": 0,
+      "list1": 0,
+      "deltaSvodData": 124985
+    },
+    {
+      "wcr": "PKM4",
+      "svod": 107018,
+      "data": 0,
+      "list1": 0,
+      "deltaSvodData": 107018
+    },
+    {
+      "wcr": "PKM2",
+      "svod": 93317,
+      "data": 0,
+      "list1": 0,
+      "deltaSvodData": 93317
+    },
+    {
+      "wcr": "PKMC",
+      "svod": 50164,
+      "data": 0,
+      "list1": 0,
+      "deltaSvodData": 50164
+    },
+    {
+      "wcr": "RPL2",
+      "svod": 0,
+      "data": 464,
+      "list1": 464,
+      "deltaSvodData": -464
+    },
+    {
+      "wcr": "RPL1",
+      "svod": 0,
+      "data": 104,
+      "list1": 104,
+      "deltaSvodData": -104
+    },
+    {
+      "wcr": "IN03",
+      "svod": 0,
+      "data": 69,
+      "list1": 69,
+      "deltaSvodData": -69
+    },
+    {
+      "wcr": "RPL5",
+      "svod": 0,
+      "data": 63,
+      "list1": 63,
+      "deltaSvodData": -63
+    },
+    {
+      "wcr": "PPM2",
+      "svod": 16531,
+      "data": 16544,
+      "list1": 16544,
+      "deltaSvodData": -13
+    },
+    {
+      "wcr": "DEF",
+      "svod": 0,
+      "data": 9,
+      "list1": 9,
+      "deltaSvodData": -9
+    },
+    {
+      "wcr": "IN02",
+      "svod": 0,
+      "data": 3,
+      "list1": 3,
+      "deltaSvodData": -3
+    },
+    {
+      "wcr": "P2M2",
+      "svod": 91843,
+      "data": 91845,
+      "list1": 91845,
+      "deltaSvodData": -2
+    },
+    {
+      "wcr": "P3BL",
+      "svod": 2868,
+      "data": 2868,
+      "list1": 2868,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PM21",
+      "svod": 63,
+      "data": 63,
+      "list1": 63,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PM22",
+      "svod": 791,
+      "data": 791,
+      "list1": 791,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PM31",
+      "svod": 466,
+      "data": 466,
+      "list1": 466,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PM32",
+      "svod": 1128,
+      "data": 1128,
+      "list1": 1128,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PM41",
+      "svod": 927,
+      "data": 927,
+      "list1": 927,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PM42",
+      "svod": 11735,
+      "data": 11735,
+      "list1": 11735,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PM51",
+      "svod": 417,
+      "data": 417,
+      "list1": 417,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PM52",
+      "svod": 2056,
+      "data": 2056,
+      "list1": 2056,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PMC2",
+      "svod": 10955,
+      "data": 10955,
+      "list1": 10955,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PMT4",
+      "svod": 1871,
+      "data": 1871,
+      "list1": 1871,
+      "deltaSvodData": 0
+    },
+    {
+      "wcr": "PPM3",
+      "svod": 385,
+      "data": 385,
+      "list1": 385,
+      "deltaSvodData": 0
+    }
+  ],
+  "person100022": {
+    "svod": {
+      "qty": 141735,
+      "name": "BAYYSH K.S."
+    },
+    "list1": {
+      "qty": 75675,
+      "name": "BAYYSH K.S."
+    },
+    "data": {
+      "qty": 75675,
+      "name": "BAYYSH K.S."
+    }
+  }
+}

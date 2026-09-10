@@ -15,7 +15,6 @@ import {
   useMediaQuery,
   TableSortLabel,
   LinearProgress,
-  Tooltip,
 } from '@mui/material';
 import { Search, FilterAltOff, Refresh } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
@@ -151,7 +150,7 @@ const OperationCard = ({ op }: { op: OperationRow }) => {
             mb: 0.5,
           }}
         >
-          Заработано
+          Баланс
         </Typography>
         <Box
           sx={{
@@ -172,7 +171,6 @@ const OperationCard = ({ op }: { op: OperationRow }) => {
           <CurrencyDisplay
             amount={op.base_amount || 0}
             variant={isLarge ? 'default' : 'compact'}
-            unit="К"
           />
           {formula && (
             <Typography
@@ -246,7 +244,7 @@ const OperationCard = ({ op }: { op: OperationRow }) => {
                   letterSpacing: '0.06em',
                 }}
               >
-                SAP задачи
+                Кол-во
               </Typography>
               <Typography
                 sx={{
@@ -260,41 +258,6 @@ const OperationCard = ({ op }: { op: OperationRow }) => {
               </Typography>
             </Box>
           )}
-
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              backgroundColor: 'var(--color-bg-elevated)',
-              border: '1px solid var(--color-border-subtle)',
-              borderRadius: 1,
-              px: 1,
-              py: 0.375,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.625rem',
-                color: 'var(--color-text-muted)',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-              }}
-            >
-              Расценка
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: '0.8125rem',
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--color-text-secondary)',
-                fontWeight: 600,
-              }}
-            >
-              {`${fmtMoney(op.rate || 0)} К / АЕИ`}
-            </Typography>
-          </Box>
         </Box>
       </Box>
     </Box>
@@ -346,7 +309,7 @@ const TypeBreakdown = ({ rows, total }: { rows: TypeShare[]; total: number }) =>
           mb: 1.5,
         }}
       >
-        Из чего сложился заработок
+        Из чего сложился баланс
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
         {rows.map((row) => {
@@ -530,10 +493,7 @@ const OperationsPage = () => {
 
   return (
     <Box>
-      <PageHeader
-        title="Мои операции"
-        subtitle="Комплектация: АЕИ × ставка норм комплектации. Сортировка и прочие АЕИ: АЕИ × тариф. Итог сверху — за выбранные дни, с коэффициентом качества."
-      />
+      <PageHeader title="Мои операции" />
 
       <Box
         sx={{
@@ -552,13 +512,12 @@ const OperationsPage = () => {
         ) : (
           <Box>
             <StatCard
-              label={`Заработано ${periodLabel}`}
+              label={`Баланс ${periodLabel}`}
               variant="hero"
               value={
                 <CurrencyDisplay
                   amount={summary?.total_amount || 0}
                   variant="large"
-                  unit="К"
                 />
               }
               subStats={[
@@ -569,9 +528,6 @@ const OperationsPage = () => {
                 },
               ]}
             />
-            <Typography sx={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', mt: 1, px: 0.5 }}>
-              Итог за календарные дни периода, с коэффициентом качества. Комплектация — АЕИ × ставка норм, сортировка — АЕИ × тариф.
-            </Typography>
           </Box>
         )}
         {summaryLoading ? (
@@ -616,7 +572,7 @@ const OperationsPage = () => {
         />
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button variant="contained" size="small" startIcon={<Search />} onClick={handleSearch}>
-            Показать заработок
+            Показать баланс
           </Button>
           {hasFilter && (
             <Button
@@ -743,37 +699,20 @@ const OperationsPage = () => {
                       </TableSortLabel>
                     </TableCell>
                     <TableCell align="right" sx={{ width: 96 }}>
-                      <Tooltip title="SAP ZprodWtItm. В расчёт ЗП не входит — зарплата комплектации = АЕИ × ставка норм.">
-                        <span>SAP задачи</span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sortDirection={sortBy === 'rate' ? sortOrder : false}
-                      sx={{ width: 130 }}
-                    >
-                      <TableSortLabel
-                        active={sortBy === 'rate'}
-                        direction={sortBy === 'rate' ? sortOrder : 'asc'}
-                        onClick={() => handleSort('rate')}
-                      >
-                        Расценка
-                      </TableSortLabel>
+                      <span>Кол-во</span>
                     </TableCell>
                     <TableCell
                       align="right"
                       sortDirection={sortBy === 'base_amount' ? sortOrder : false}
                       sx={{ width: 180, color: 'var(--color-gold) !important' }}
                     >
-                      <Tooltip title="Комплектация: АЕИ × ставка норм. Сортировка: АЕИ × тариф.">
-                        <TableSortLabel
-                          active={sortBy === 'base_amount'}
-                          direction={sortBy === 'base_amount' ? sortOrder : 'asc'}
-                          onClick={() => handleSort('base_amount')}
-                        >
-                          Заработано
-                        </TableSortLabel>
-                      </Tooltip>
+                      <TableSortLabel
+                        active={sortBy === 'base_amount'}
+                        direction={sortBy === 'base_amount' ? sortOrder : 'asc'}
+                        onClick={() => handleSort('base_amount')}
+                      >
+                        Баланс
+                      </TableSortLabel>
                     </TableCell>
                   </TableRow>
                 </TableHead>
@@ -798,10 +737,6 @@ const OperationsPage = () => {
                       <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)' }}>
                         {Number(op.prod_count || 0) || '—'}
                       </TableCell>
-                      <TableCell align="right" sx={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>
-                        {fmtMoney(op.rate || 0)}{' '}
-                        К/АЕИ
-                      </TableCell>
                       <TableCell align="right">
                         <Box
                           sx={{
@@ -817,7 +752,7 @@ const OperationsPage = () => {
                             backgroundColor: 'var(--color-gold-muted)',
                           }}
                         >
-                          <CurrencyDisplay amount={op.base_amount || 0} variant="compact" unit="К" />
+                          <CurrencyDisplay amount={op.base_amount || 0} variant="compact" />
                           {earningFormula(op) && (
                             <Typography
                               sx={{
@@ -868,7 +803,7 @@ const OperationsPage = () => {
             }}
           >
             Итого за период:{' '}
-            <CurrencyDisplay amount={summary?.total_amount || 0} variant="compact" unit="К" />
+            <CurrencyDisplay amount={summary?.total_amount || 0} variant="compact" />
           </Typography>
           <TablePagination
             component="div"

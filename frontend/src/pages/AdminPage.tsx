@@ -213,7 +213,7 @@ const ExpandedEmployeeRow = ({ employeeId, startDate, endDate }: ExpandedRowProp
                   : <KeyboardArrowRight fontSize="small" />}
               </IconButton>
 
-              {/* Формат: "Пополнение — 26987 АЕИ — 15896 руб" */}
+              {/* Формат: "Пополнение — 26987 АЕИ — 15896" */}
               <Typography sx={{
                 fontSize: '0.8125rem',
                 fontWeight: 600,

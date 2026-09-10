@@ -114,7 +114,7 @@ export const OperationDetails = memo(({
         </Typography>
       </Box>
 
-      {/* Строки детализации — формат: "18.10.2025 — Пополнение — 2 АЕИ — 1.56 руб — всего 3.12 руб" */}
+      {/* Строки детализации — формат: "18.10.2025 — Пополнение — 2 АЕИ — 1.56 — всего 3.12" */}
       {records.map((rec: OperationRecord) => {
         let dateLabel = '—';
         let opType = operationType;

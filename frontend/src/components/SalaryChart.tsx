@@ -23,7 +23,7 @@ interface SalaryChartProps {
   title?: string;
 }
 
-const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамика заработка' }) => {
+const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамика баланса' }) => {
   const muiTheme = useTheme();
   const textSecondary = muiTheme.palette.text.secondary;
   const borderColor = muiTheme.palette.divider;
@@ -85,7 +85,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
               mb: 0.5,
             }}
           >
-            Заработок: <CurrencyDisplay amount={payload[0].value} />
+            Баланс: <CurrencyDisplay amount={payload[0].value} />
           </Typography>
           {payload[0].payload.operations > 0 && (
             <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)' }}>
@@ -121,7 +121,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
 
             {chartData.length >= 2 && (
               <MuiTooltip
-                title="Изменение среднего заработка за последнюю неделю по сравнению с предыдущей"
+                title="Изменение среднего баланса за последнюю неделю по сравнению с предыдущей"
                 arrow
               >
                 <Box
@@ -191,13 +191,6 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                       tick={{ fill: textSecondary, fontSize: 12, fontWeight: 500 }}
                       stroke={borderColor}
                       tickFormatter={(value) => value.toLocaleString('ru-RU')}
-                      label={{
-                        value: 'руб.',
-                        angle: 0,
-                        position: 'top',
-                        offset: 10,
-                        style: { fontSize: 13, fontWeight: 600, fill: textSecondary },
-                      }}
                     />
                     <Tooltip
                       content={<CustomTooltip />}
@@ -206,7 +199,7 @@ const SalaryChart: React.FC<SalaryChartProps> = ({ data, title = 'Динамик
                     <Area
                       type="monotone"
                       dataKey="amount"
-                      name="Заработок"
+                      name="Баланс"
                       stroke={primaryColor}
                       strokeWidth={2.5}
                       fillOpacity={1}

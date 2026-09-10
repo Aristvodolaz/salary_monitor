@@ -1,0 +1,939 @@
+{
+  "generatedAt": "2026-09-01T12:37:43.892Z",
+  "dbConnected": true,
+  "sourceOfTruth": "Свод для ЗП",
+  "qtyField": "Суммарное кол-во АЕИ в продуктовых задач (SAP AEI / operations.count), не ZprodWtItm / prod_count",
+  "verdict": {
+    "appWrongFormula": false,
+    "officialPickingQty": "AEI (count)",
+    "currentAppPickingQty": "count (AEI)",
+    "formula": "picking = count × wcr_picking_norms.rate; else mapped count × tariff; else 0",
+    "warehouse": "Excel — 34 комплектовщика склада 02DQ",
+    "allPass": false
+  },
+  "excelSheets": {
+    "Свод для ЗП": {
+      "rows": 396,
+      "qty": 1159446,
+      "people": 34,
+      "wcrs": 44,
+      "dates": [
+        "2026-07-01"
+      ],
+      "note": "помесячный свод для ЗП; даты = начало периода"
+    },
+    "Лист1": {
+      "rows": 340,
+      "qty": 650781,
+      "people": 34,
+      "wcrs": 47,
+      "dates": [
+        "2026-07-01"
+      ],
+      "note": "агрегат Data без упаковки PKM* и без DEFF"
+    },
+    "Data": {
+      "rows": 8571,
+      "qty": 650781,
+      "people": 34,
+      "wcrs": 47,
+      "dates": [
+        "2026-07-01"
+      ],
+      "note": "те же qty что Лист1; даты тоже 2026-07-01"
+    }
+  },
+  "sheetGap": {
+    "svodMinusData": 508665,
+    "svodOnlyWcrs": {
+      "DEFF": 124985,
+      "PKM2": 93317,
+      "PKM4": 107018,
+      "PKM5": 133908,
+      "PKMC": 50164
+    },
+    "dataOnlyWcrs": {
+      "RPL2": 464,
+      "RPL1": 104,
+      "IN03": 69,
+      "RPL5": 63,
+      "DEF": 9,
+      "IN02": 3,
+      "UNDE": 0,
+      "PU02": 0
+    },
+    "packagingNote": "PKM* ≈ P2M* по AEI: упаковка платится отдельно в своде"
+  },
+  "dbJuly": {
+    "allOps": {
+      "n": 81062,
+      "aei": 1578489,
+      "prod": 278679,
+      "amount": 2584615.2
+    },
+    "pickingAllWh": {
+      "n": 57538,
+      "aei": 1255356,
+      "prod": 243309,
+      "amount": 678130.5,
+      "dmin": "2026-07-01",
+      "dmax": "2026-07-31"
+    },
+    "picking01SS": {
+      "n": 65,
+      "aei": 1863,
+      "prod": 220,
+      "amount": 890.3
+    },
+    "picking02DQ": {
+      "n": 52811,
+      "aei": 1043307,
+      "prod": 204843,
+      "amount": 551238.9
+    }
+  },
+  "compare34People02DQ": {
+    "excelSvodQty": 1159446,
+    "dbPickingAei": 1032230,
+    "dbPickingProd": 201228,
+    "excelWithoutMissingWcrs": 1031146,
+    "aeiVsExcelKnownDelta": 1084,
+    "exactAeiPeople": 20,
+    "exactAfterRemoveDEFF": 25,
+    "close2pctAfterDEFF": 29,
+    "remainingAbsDeltaAfterDEFF": 4393,
+    "impliedExcelAmtKnownWcrsAeiXrate": 2029474.4,
+    "currentAppPickingAmtAllWh": 678130.5
+  },
+  "formulaEvidence": {
+    "person100022_Bayysh": {
+      "excelSvod": 141735,
+      "dbCount": 141735,
+      "dbProdCount": 13443,
+      "dbAmountProdXrate": 16008.7
+    },
+    "wcrP2M2_02DQexcelPeople": {
+      "excel": 91843,
+      "dbAei": 91843,
+      "dbProd": 18747
+    },
+    "aeiBetterWcrCount": 36,
+    "prodBetterWcrCount": 8
+  },
+  "missingWcrs": {
+    "inExcelNotInDbJuly": [
+      {
+        "wcr": "DEFF",
+        "excelQty": 124985,
+        "note": "нет в wcr_mapping; DEF есть как ПМ_Упаковка 4.1. Восемь человек в своде."
+      },
+      {
+        "wcr": "P3BL",
+        "excelQty": 2868,
+        "note": "нет в mapping/norms/operations"
+      },
+      {
+        "wcr": "P3BM",
+        "excelQty": 411
+      },
+      {
+        "wcr": "PHSM",
+        "excelQty": 33
+      },
+      {
+        "wcr": "P3BS",
+        "excelQty": 3
+      }
+    ],
+    "inDataNotInDbJuly": [
+      "IN02",
+      "IN03",
+      "PU02",
+      "UNDE",
+      "RPL5"
+    ],
+    "deffByPerson": [
+      {
+        "pers": "85916",
+        "name": "LOGINOVSKAYA E. B.",
+        "qty": 24837
+      },
+      {
+        "pers": "85760",
+        "name": "KANISHCHEVA S. N.",
+        "qty": 24018
+      },
+      {
+        "pers": "77099",
+        "name": "YEVSTIGNEYEVA L.Y.",
+        "qty": 23821
+      },
+      {
+        "pers": "92118",
+        "name": "MALININA V. S.",
+        "qty": 23373
+      },
+      {
+        "pers": "80792",
+        "name": "MILLER O. V.",
+        "qty": 18943
+      },
+      {
+        "pers": "92133",
+        "name": "NESTERENKO E. N.",
+        "qty": 9984
+      },
+      {
+        "pers": "86717",
+        "name": "SHUMENKO A. A.",
+        "qty": 5
+      },
+      {
+        "pers": "91959",
+        "name": "NOOKENBAEVA C. A.",
+        "qty": 4
+      }
+    ]
+  },
+  "rpl": {
+    "RPL2": {
+      "n": 14102,
+      "aei": 262670,
+      "prod": 20863,
+      "amount": 1549753,
+      "operation_type": "ФС_Коробочная комплектация",
+      "tariff": 5.9,
+      "formula": "count × 5.9",
+      "excelSvod": 0,
+      "excelData": 464
+    },
+    "RPL1": {
+      "n": 9328,
+      "aei": 57647,
+      "prod": 14402,
+      "amount": 340117.3,
+      "operation_type": "ФС_Коробочная комплектация",
+      "tariff": 5.9,
+      "excelSvod": 0,
+      "excelData": 104
+    },
+    "note": "Миграция 010 не включала RPL; в живой БД RPL1/2/3 привязаны к коробочной комплектации. Официальный свод этих 34 человек RPL почти не платит. Основной объём RPL2 — склады 01SS/02SR/0SK5, не 02DQ."
+  },
+  "peopleNotInExcel": {
+    "note": "Другие склады (0SK5, 0SK2), не ошибка свода 02DQ",
+    "top": [
+      {
+        "pers": "99335",
+        "fio": "ГЕЙНЦ ТАТЬЯНА ДМИТРИЕВНА",
+        "wh": "0SK5",
+        "aei": 39361,
+        "prod": 8671
+      },
+      {
+        "pers": "98634",
+        "fio": "КУКУШКИН ЮРИЙ АНАТОЛЬЕВИЧ",
+        "wh": "0SK2",
+        "aei": 16967,
+        "prod": 2822
+      }
+    ]
+  },
+  "excelOnlyPerson": {
+    "pers": "64694",
+    "name": "TUPELEKIN D. A.",
+    "excel": 27,
+    "dbPickingAei": 1102
+  },
+  "toFix": [
+    "Сменить формулу комплектации: prod_count×rate → count×rate в resolveAmount, views.sql, migration 016, norms.service",
+    "Пересчитать operations.amount по комплектации",
+    "Добавить DEFF (алиас DEF или отдельная ставка), P3BL, P3BM, P3BS, PHSM",
+    "Снять RPL1/RPL2/RPL3 с ФС_Коробочная комплектация; считать пополнение по своему тарифу или не включать в ЗП комплектации",
+    "Сверять ЗП со «Свод для ЗП», не с Data/Лист1",
+    "Фильтр склада для этой выгрузки — 02DQ, не 01SS"
+  ],
+  "validity": {
+    "generatedAt": "2026-09-01T12:37:43.892Z",
+    "sourceOfTruth": "Свод для ЗП",
+    "formula": "picking = count × wcr_picking_norms.rate; else mapped count × tariff; else 0",
+    "warehouse": "02DQ",
+    "people": 34,
+    "sapSync": {
+      "attempted": true,
+      "warehouse": "02DQ",
+      "period": "2026-07-01..2026-07-31",
+      "ok": false,
+      "error": "getaddrinfo ENOTFOUND pwm.komus.net",
+      "deletedBeforeFetch": 57870,
+      "july02dqRowsNow": 0,
+      "note": "Локальный DNS не резолвит pwm.komus.net. Linux /home/admin-lc/salary_monitor с этой машины недоступен. Нужен повторный sync 02DQ июля с хоста, где SAP открывается.",
+      "preWipePerson100022": {
+        "employee_id": "00100022",
+        "aei": 141735,
+        "prod": 13443,
+        "amount": 166084.5,
+        "expected": 166084.5,
+        "note": "Снимок до DELETE, после миграции 017: count×rate совпал с Excel qty."
+      }
+    },
+    "checks": {
+      "person100022": {
+        "pass": false,
+        "excel": 141735,
+        "dbAei": 0,
+        "dbProd": 0,
+        "dbAmount": 0,
+        "expectedCountXrate": 0,
+        "fio": null,
+        "employee_id": null
+      },
+      "totals34people02DQ": {
+        "pass": false,
+        "excel": 1159446,
+        "dbAei": 0,
+        "dbAmount": 0,
+        "expected": 0,
+        "delta": -1159446
+      },
+      "knownWcrSubset": {
+        "pass": false,
+        "excelKnown": 1031146,
+        "dbAei": 0,
+        "dbAmount": 0,
+        "expected": 0,
+        "impliedMoneyTarget": 2029474.4,
+        "deltaAei": -1031146
+      },
+      "p2m2": {
+        "pass": false,
+        "excel": 91843,
+        "dbAei": 0,
+        "dbProd": 0
+      },
+      "deff": {
+        "pass": false,
+        "people": [
+          {
+            "pers": "85916",
+            "name": "LOGINOVSKAYA E. B.",
+            "qty": 24837,
+            "dbAei": 0,
+            "delta": -24837,
+            "pass": false
+          },
+          {
+            "pers": "85760",
+            "name": "KANISHCHEVA S. N.",
+            "qty": 24018,
+            "dbAei": 0,
+            "delta": -24018,
+            "pass": false
+          },
+          {
+            "pers": "77099",
+            "name": "YEVSTIGNEYEVA L.Y.",
+            "qty": 23821,
+            "dbAei": 0,
+            "delta": -23821,
+            "pass": false
+          },
+          {
+            "pers": "92118",
+            "name": "MALININA V. S.",
+            "qty": 23373,
+            "dbAei": 0,
+            "delta": -23373,
+            "pass": false
+          },
+          {
+            "pers": "80792",
+            "name": "MILLER O. V.",
+            "qty": 18943,
+            "dbAei": 0,
+            "delta": -18943,
+            "pass": false
+          },
+          {
+            "pers": "92133",
+            "name": "NESTERENKO E. N.",
+            "qty": 9984,
+            "dbAei": 0,
+            "delta": -9984,
+            "pass": false
+          },
+          {
+            "pers": "86717",
+            "name": "SHUMENKO A. A.",
+            "qty": 5,
+            "dbAei": 0,
+            "delta": -5,
+            "pass": false
+          },
+          {
+            "pers": "91959",
+            "name": "NOOKENBAEVA C. A.",
+            "qty": 4,
+            "dbAei": 0,
+            "delta": -4,
+            "pass": false
+          }
+        ],
+        "dbRows": []
+      },
+      "extraSyncedWcrs": [],
+      "rpl": {
+        "pass": true,
+        "rows": [
+          {
+            "wcr": "RPL1",
+            "type": "ПМ_Пополнение",
+            "n": 5837,
+            "aei": 39379,
+            "amount": 0
+          },
+          {
+            "wcr": "RPL2",
+            "type": "ПМ_Пополнение",
+            "n": 12579,
+            "aei": 244697,
+            "amount": 0
+          },
+          {
+            "wcr": "RPL3",
+            "type": "ПМ_Пополнение",
+            "n": 49,
+            "aei": 2616,
+            "amount": 0
+          }
+        ],
+        "stillInMapping": []
+      },
+      "viewMatchesStored": {
+        "pass": true,
+        "sampled": 30,
+        "mismatches": []
+      }
+    },
+    "remaining": {
+      "personMismatches": [
+        {
+          "pers": "100022",
+          "name": "BAYYSH K.S.",
+          "excel": 141735,
+          "dbAei": 0,
+          "delta": -141735,
+          "exact": false
+        },
+        {
+          "pers": "95521",
+          "name": "KOZLOVA G.M.",
+          "excel": 81474,
+          "dbAei": 0,
+          "delta": -81474,
+          "exact": false
+        },
+        {
+          "pers": "100481",
+          "name": "KARIMOVA I.V.",
+          "excel": 77638,
+          "dbAei": 0,
+          "delta": -77638,
+          "exact": false
+        },
+        {
+          "pers": "99616",
+          "name": "GULYAYEVA YU.YU.",
+          "excel": 57478,
+          "dbAei": 0,
+          "delta": -57478,
+          "exact": false
+        },
+        {
+          "pers": "96204",
+          "name": "MAMYRBEKOVA N.M.",
+          "excel": 56420,
+          "dbAei": 0,
+          "delta": -56420,
+          "exact": false
+        },
+        {
+          "pers": "84310",
+          "name": "KANCHURINA F. B.",
+          "excel": 56128,
+          "dbAei": 0,
+          "delta": -56128,
+          "exact": false
+        },
+        {
+          "pers": "85760",
+          "name": "KANISHCHEVA S. N.",
+          "excel": 50504,
+          "dbAei": 0,
+          "delta": -50504,
+          "exact": false
+        },
+        {
+          "pers": "80976",
+          "name": "KUZOVKOVA O. V.",
+          "excel": 49082,
+          "dbAei": 0,
+          "delta": -49082,
+          "exact": false
+        },
+        {
+          "pers": "77099",
+          "name": "YEVSTIGNEYEVA L.Y.",
+          "excel": 47148,
+          "dbAei": 0,
+          "delta": -47148,
+          "exact": false
+        },
+        {
+          "pers": "100198",
+          "name": "FOMINA A.A.",
+          "excel": 46604,
+          "dbAei": 0,
+          "delta": -46604,
+          "exact": false
+        },
+        {
+          "pers": "79442",
+          "name": "MISYULYA E. I.",
+          "excel": 46567,
+          "dbAei": 0,
+          "delta": -46567,
+          "exact": false
+        },
+        {
+          "pers": "76947",
+          "name": "POTAPOVA T. V.",
+          "excel": 45549,
+          "dbAei": 0,
+          "delta": -45549,
+          "exact": false
+        },
+        {
+          "pers": "92118",
+          "name": "MALININA V. S.",
+          "excel": 43808,
+          "dbAei": 0,
+          "delta": -43808,
+          "exact": false
+        },
+        {
+          "pers": "85916",
+          "name": "LOGINOVSKAYA E. B.",
+          "excel": 39726,
+          "dbAei": 0,
+          "delta": -39726,
+          "exact": false
+        },
+        {
+          "pers": "92133",
+          "name": "NESTERENKO E. N.",
+          "excel": 36187,
+          "dbAei": 0,
+          "delta": -36187,
+          "exact": false
+        },
+        {
+          "pers": "88619",
+          "name": "SAPRYKINA S. Z.",
+          "excel": 35006,
+          "dbAei": 0,
+          "delta": -35006,
+          "exact": false
+        },
+        {
+          "pers": "74506",
+          "name": "MAKAROVA E. N.",
+          "excel": 32137,
+          "dbAei": 0,
+          "delta": -32137,
+          "exact": false
+        },
+        {
+          "pers": "80792",
+          "name": "MILLER O. V.",
+          "excel": 32011,
+          "dbAei": 0,
+          "delta": -32011,
+          "exact": false
+        },
+        {
+          "pers": "90888",
+          "name": "ZHOLDOSHOVA M. B.",
+          "excel": 27182,
+          "dbAei": 0,
+          "delta": -27182,
+          "exact": false
+        },
+        {
+          "pers": "100116",
+          "name": "SURKOVA T.D.",
+          "excel": 23678,
+          "dbAei": 0,
+          "delta": -23678,
+          "exact": false
+        },
+        {
+          "pers": "100025",
+          "name": "MEDEROVA K.",
+          "excel": 19347,
+          "dbAei": 0,
+          "delta": -19347,
+          "exact": false
+        },
+        {
+          "pers": "92653",
+          "name": "SOKOLOVA S. N.",
+          "excel": 14890,
+          "dbAei": 0,
+          "delta": -14890,
+          "exact": false
+        },
+        {
+          "pers": "105095",
+          "name": "SHAKIRBAYEVA A.Z.",
+          "excel": 14186,
+          "dbAei": 0,
+          "delta": -14186,
+          "exact": false
+        },
+        {
+          "pers": "100835",
+          "name": "SMIRNOV A.A.",
+          "excel": 13274,
+          "dbAei": 0,
+          "delta": -13274,
+          "exact": false
+        },
+        {
+          "pers": "94235",
+          "name": "STOYAKIN A. V.",
+          "excel": 12511,
+          "dbAei": 0,
+          "delta": -12511,
+          "exact": false
+        },
+        {
+          "pers": "86803",
+          "name": "LAYER A. A.",
+          "excel": 11928,
+          "dbAei": 0,
+          "delta": -11928,
+          "exact": false
+        },
+        {
+          "pers": "11031",
+          "name": "LUTOSHKIN M. V.",
+          "excel": 11553,
+          "dbAei": 0,
+          "delta": -11553,
+          "exact": false
+        },
+        {
+          "pers": "101444",
+          "name": "NIKOTIN S.V.",
+          "excel": 9868,
+          "dbAei": 0,
+          "delta": -9868,
+          "exact": false
+        },
+        {
+          "pers": "98670",
+          "name": "BAYMURATOV U.T.",
+          "excel": 9331,
+          "dbAei": 0,
+          "delta": -9331,
+          "exact": false
+        },
+        {
+          "pers": "44591",
+          "name": "TRIFONOV N. E.",
+          "excel": 8941,
+          "dbAei": 0,
+          "delta": -8941,
+          "exact": false
+        },
+        {
+          "pers": "100474",
+          "name": "BOGDANOVA YE.N.",
+          "excel": 4425,
+          "dbAei": 0,
+          "delta": -4425,
+          "exact": false
+        },
+        {
+          "pers": "91959",
+          "name": "NOOKENBAEVA C. A.",
+          "excel": 2086,
+          "dbAei": 0,
+          "delta": -2086,
+          "exact": false
+        },
+        {
+          "pers": "86717",
+          "name": "SHUMENKO A. A.",
+          "excel": 1017,
+          "dbAei": 0,
+          "delta": -1017,
+          "exact": false
+        },
+        {
+          "pers": "64694",
+          "name": "TUPELEKIN D. A.",
+          "excel": 27,
+          "dbAei": 0,
+          "delta": -27,
+          "exact": false
+        }
+      ],
+      "wcrMismatches": [
+        {
+          "wcr": "PKM5",
+          "excel": 133908,
+          "dbAei": 0,
+          "delta": -133908
+        },
+        {
+          "wcr": "P2M5",
+          "excel": 133080,
+          "dbAei": 0,
+          "delta": -133080
+        },
+        {
+          "wcr": "DEFF",
+          "excel": 124985,
+          "dbAei": 0,
+          "delta": -124985
+        },
+        {
+          "wcr": "PSST",
+          "excel": 122101,
+          "dbAei": 0,
+          "delta": -122101
+        },
+        {
+          "wcr": "PKM4",
+          "excel": 107018,
+          "dbAei": 0,
+          "delta": -107018
+        },
+        {
+          "wcr": "P2M4",
+          "excel": 105464,
+          "dbAei": 0,
+          "delta": -105464
+        },
+        {
+          "wcr": "PKM2",
+          "excel": 93317,
+          "dbAei": 0,
+          "delta": -93317
+        },
+        {
+          "wcr": "P2M2",
+          "excel": 91843,
+          "dbAei": 0,
+          "delta": -91843
+        },
+        {
+          "wcr": "PKMC",
+          "excel": 50164,
+          "dbAei": 0,
+          "delta": -50164
+        },
+        {
+          "wcr": "P2MC",
+          "excel": 50011,
+          "dbAei": 0,
+          "delta": -50011
+        },
+        {
+          "wcr": "PST2",
+          "excel": 24852,
+          "dbAei": 0,
+          "delta": -24852
+        },
+        {
+          "wcr": "PS3L",
+          "excel": 24646,
+          "dbAei": 0,
+          "delta": -24646
+        },
+        {
+          "wcr": "PPM5",
+          "excel": 22097,
+          "dbAei": 0,
+          "delta": -22097
+        },
+        {
+          "wcr": "PPM2",
+          "excel": 16531,
+          "dbAei": 0,
+          "delta": -16531
+        },
+        {
+          "wcr": "PPM4",
+          "excel": 12899,
+          "dbAei": 0,
+          "delta": -12899
+        },
+        {
+          "wcr": "PM42",
+          "excel": 11735,
+          "dbAei": 0,
+          "delta": -11735
+        },
+        {
+          "wcr": "PMC2",
+          "excel": 10955,
+          "dbAei": 0,
+          "delta": -10955
+        },
+        {
+          "wcr": "PS3M",
+          "excel": 4238,
+          "dbAei": 0,
+          "delta": -4238
+        },
+        {
+          "wcr": "P3BL",
+          "excel": 2868,
+          "dbAei": 0,
+          "delta": -2868
+        },
+        {
+          "wcr": "PZST",
+          "excel": 2480,
+          "dbAei": 0,
+          "delta": -2480
+        },
+        {
+          "wcr": "PM52",
+          "excel": 2056,
+          "dbAei": 0,
+          "delta": -2056
+        },
+        {
+          "wcr": "PST1",
+          "excel": 2012,
+          "dbAei": 0,
+          "delta": -2012
+        },
+        {
+          "wcr": "PMT4",
+          "excel": 1871,
+          "dbAei": 0,
+          "delta": -1871
+        },
+        {
+          "wcr": "PM32",
+          "excel": 1128,
+          "dbAei": 0,
+          "delta": -1128
+        },
+        {
+          "wcr": "PPMC",
+          "excel": 1071,
+          "dbAei": 0,
+          "delta": -1071
+        },
+        {
+          "wcr": "PM41",
+          "excel": 927,
+          "dbAei": 0,
+          "delta": -927
+        },
+        {
+          "wcr": "PSCL",
+          "excel": 840,
+          "dbAei": 0,
+          "delta": -840
+        },
+        {
+          "wcr": "PM22",
+          "excel": 791,
+          "dbAei": 0,
+          "delta": -791
+        },
+        {
+          "wcr": "PCD2",
+          "excel": 536,
+          "dbAei": 0,
+          "delta": -536
+        },
+        {
+          "wcr": "PMC1",
+          "excel": 492,
+          "dbAei": 0,
+          "delta": -492
+        },
+        {
+          "wcr": "PM31",
+          "excel": 466,
+          "dbAei": 0,
+          "delta": -466
+        },
+        {
+          "wcr": "PM51",
+          "excel": 417,
+          "dbAei": 0,
+          "delta": -417
+        },
+        {
+          "wcr": "P3BM",
+          "excel": 411,
+          "dbAei": 0,
+          "delta": -411
+        },
+        {
+          "wcr": "PPM3",
+          "excel": 385,
+          "dbAei": 0,
+          "delta": -385
+        },
+        {
+          "wcr": "PSTT",
+          "excel": 264,
+          "dbAei": 0,
+          "delta": -264
+        },
+        {
+          "wcr": "PM12",
+          "excel": 156,
+          "dbAei": 0,
+          "delta": -156
+        },
+        {
+          "wcr": "PZCD",
+          "excel": 134,
+          "dbAei": 0,
+          "delta": -134
+        },
+        {
+          "wcr": "PSCD",
+          "excel": 95,
+          "dbAei": 0,
+          "delta": -95
+        },
+        {
+          "wcr": "PM21",
+          "excel": 63,
+          "dbAei": 0,
+          "delta": -63
+        },
+        {
+          "wcr": "PM11",
+          "excel": 44,
+          "dbAei": 0,
+          "delta": -44
+        }
+      ],
+      "exactPeople": 0,
+      "peopleTotal": 34
+    },
+    "allPass": false
+  }
+}

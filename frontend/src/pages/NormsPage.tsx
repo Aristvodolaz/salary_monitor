@@ -20,6 +20,7 @@ import { alpha } from '@mui/material/styles';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { normsAPI } from '../services/api';
 import { PageHeader } from '../components/ui/PageHeader';
+import { CoinBadge } from '../components/CurrencyDisplay';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,14 @@ const PICKING_TYPE_COLORS: Record<string, string> = {
 
 const fmt = (n: number) => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtInt = (n: number) => n.toLocaleString('ru-RU');
+
+/** Сумма с монеткой «К» перед числом. */
+const Money = ({ v, size = 'sm' }: { v: number; size?: 'sm' | 'md' }) => (
+  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline' }}>
+    <CoinBadge size={size} />
+    {fmt(v)}
+  </Box>
+);
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -176,7 +185,7 @@ const ExpandedEmployeeDetail = ({
                 {fmtInt(row.total_aei)} АЕИ
               </Typography>
               <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.8rem', minWidth: 90, textAlign: 'right', color: '#10B981' }}>
-                {fmt(row.total_amount)} ₽
+                <Money v={row.total_amount} />
               </Typography>
             </Box>
           ))}
@@ -218,7 +227,7 @@ const ExpandedEmployeeDetail = ({
                 {fmtInt(row.total_prod)} АЕИ
               </Typography>
               <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.8rem', minWidth: 90, textAlign: 'right', color: '#3B82F6' }}>
-                {fmt(row.total_amount)} ₽
+                <Money v={row.total_amount} />
               </Typography>
             </Box>
           ))}
@@ -332,7 +341,7 @@ const NormsPage = () => {
                 АЕИ
               </Typography>
               <Typography sx={{ fontSize: { xs: '1.25rem', md: '1.75rem' }, fontWeight: 700, color: '#10B981', fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
-                {fmt(totals.aei_amount)} ₽
+                <Money v={totals.aei_amount} size="md" />
               </Typography>
             </Box>
           </Grid>
@@ -342,7 +351,7 @@ const NormsPage = () => {
                 Комплектация
               </Typography>
               <Typography sx={{ fontSize: { xs: '1.25rem', md: '1.75rem' }, fontWeight: 700, color: '#3B82F6', fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
-                {fmt(totals.picking_amount)} ₽
+                <Money v={totals.picking_amount} size="md" />
               </Typography>
             </Box>
           </Grid>
@@ -352,7 +361,7 @@ const NormsPage = () => {
                 Упаковка
               </Typography>
               <Typography sx={{ fontSize: { xs: '1.25rem', md: '1.75rem' }, fontWeight: 700, color: '#8B5CF6', fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
-                {fmt(totals.packing_amount)} ₽
+                <Money v={totals.packing_amount} size="md" />
               </Typography>
             </Box>
           </Grid>
@@ -362,7 +371,7 @@ const NormsPage = () => {
                 Итого
               </Typography>
               <Typography sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' }, fontWeight: 700, color: 'var(--color-gold)', fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
-                {fmt(totals.total_amount)} ₽
+                <Money v={totals.total_amount} size="md" />
               </Typography>
             </Box>
           </Grid>
@@ -429,7 +438,7 @@ const NormsPage = () => {
         <Box sx={{ px: 3, pt: 2.5, pb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--color-text-primary)', fontSize: '1rem' }}>
-              Заработок по нормативам (АЕИ и комплектация)
+              Баланс по нормативам (АЕИ и комплектация)
             </Typography>
             {!loading && (
               <Typography variant="caption" sx={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
@@ -450,12 +459,12 @@ const NormsPage = () => {
                 <HeaderCell><SortLabel col="fio">Сотрудник</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="work_days">Дней</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_aei">АЕИ</SortLabel></HeaderCell>
-                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="aei_amount">Сумма АЕИ, ₽</SortLabel></HeaderCell>
+                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="aei_amount">Сумма АЕИ</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_prod">АЕИ компл.</SortLabel></HeaderCell>
-                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="picking_amount">Сумма компл., ₽</SortLabel></HeaderCell>
+                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="picking_amount">Сумма компл.</SortLabel></HeaderCell>
                 <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="total_packing">АЕИ упак.</SortLabel></HeaderCell>
-                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="packing_amount">Сумма упак., ₽</SortLabel></HeaderCell>
-                <HeaderCell sx={{ textAlign: 'right', color: 'var(--color-gold)' }}><SortLabel col="total_amount">Итого, ₽</SortLabel></HeaderCell>
+                <HeaderCell sx={{ textAlign: 'right' }}><SortLabel col="packing_amount">Сумма упак.</SortLabel></HeaderCell>
+                <HeaderCell sx={{ textAlign: 'right', color: 'var(--color-gold)' }}><SortLabel col="total_amount">Итого</SortLabel></HeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -500,22 +509,22 @@ const NormsPage = () => {
                         {emp.total_aei > 0 ? fmtInt(emp.total_aei) : '—'}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: '#10B981', fontWeight: emp.aei_amount > 0 ? 700 : 400 }}>
-                        {emp.aei_amount > 0 ? fmt(emp.aei_amount) : '—'}
+                        {emp.aei_amount > 0 ? <Money v={emp.aei_amount} /> : '—'}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
                         {emp.total_prod > 0 ? fmtInt(emp.total_prod) : '—'}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: '#3B82F6', fontWeight: emp.picking_amount > 0 ? 700 : 400 }}>
-                        {emp.picking_amount > 0 ? fmt(emp.picking_amount) : '—'}
+                        {emp.picking_amount > 0 ? <Money v={emp.picking_amount} /> : '—'}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
                         {emp.total_packing > 0 ? fmtInt(emp.total_packing) : '—'}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: '#8B5CF6', fontWeight: emp.packing_amount > 0 ? 700 : 400 }}>
-                        {emp.packing_amount > 0 ? fmt(emp.packing_amount) : '—'}
+                        {emp.packing_amount > 0 ? <Money v={emp.packing_amount} /> : '—'}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                        {fmt(emp.total_amount)}
+                        <Money v={emp.total_amount} />
                       </TableCell>
                     </TableRow>
                     {expandedId === emp.user_id && (

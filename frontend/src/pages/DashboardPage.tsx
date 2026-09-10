@@ -66,7 +66,7 @@ const DashboardPage = () => {
   return (
     <Box sx={{ pb: { xs: 10, md: 3 } }}>
       <PageHeader
-        title="Мой заработок"
+        title="Мой баланс"
         subtitle={`Сколько начислено за ${currentMonth}`}
       />
 
@@ -93,7 +93,7 @@ const DashboardPage = () => {
         {/* Hero — текущий месяц */}
         <Grid item xs={12} md={6}>
           <StatCard
-            label="Заработано в этом месяце"
+            label="Баланс за этот месяц"
             variant="hero"
             sx={{ height: '100%' }}
             loading={loading}
@@ -101,7 +101,6 @@ const DashboardPage = () => {
               <CurrencyDisplay
                 amount={currentMonthData?.total_amount || 0}
                 variant="large"
-                unit="К"
               />
             }
             subStats={[
@@ -113,7 +112,7 @@ const DashboardPage = () => {
 
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            label="Заработано вчера"
+            label="Баланс за вчера"
             variant="default"
             sx={{ height: '100%' }}
             loading={loading}
@@ -121,7 +120,6 @@ const DashboardPage = () => {
               <CurrencyDisplay
                 amount={yesterdayData?.total_amount || 0}
                 variant="default"
-                unit="К"
               />
             }
             subStats={[
@@ -132,7 +130,7 @@ const DashboardPage = () => {
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            label={`Заработано в ${prevMonthLabel}`}
+            label={`Баланс за ${prevMonthLabel}`}
             variant="muted"
             sx={{ height: '100%' }}
             loading={loading}
@@ -140,7 +138,6 @@ const DashboardPage = () => {
               <CurrencyDisplay
                 amount={previousMonthData?.total_amount || 0}
                 variant="default"
-                unit="К"
               />
             }
             subStats={[

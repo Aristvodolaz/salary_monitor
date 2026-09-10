@@ -379,7 +379,7 @@ export class AdminService {
       { header: 'Операций',                 key: 'ops_count',   width: 12 },
       { header: 'АЕИ',                      key: 'aei',         width: 12 },
       { header: 'Ставка (ср.)',             key: 'rate',        width: 14 },
-      { header: 'Сумма, ₽',                key: 'amount',      width: 16 },
+      { header: 'Сумма',                   key: 'amount',      width: 16 },
     ];
 
     // Стиль шапки
