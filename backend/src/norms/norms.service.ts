@@ -422,24 +422,28 @@ export class NormsService {
         -- Блок 2: Комплектация (wcr_picking_norms, picking_type <> 'Упаковка') — count × rate
         ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type <> N'Упаковка' THEN ISNULL(o.count, 0) ELSE 0 END), 0)
                                                                  AS total_prod,
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type <> N'Упаковка' AND wp.rate IS NOT NULL
-                        THEN ISNULL(o.count, 0) * wp.rate ELSE 0 END), 0)
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type <> N'Упаковка' AND COALESCE(wr.rate, wp.rate) IS NOT NULL
+                        THEN ISNULL(o.count, 0) * COALESCE(wr.rate, wp.rate) ELSE 0 END), 0)
                                                                  AS picking_amount,
         -- Блок 3: Упаковка (wcr_picking_norms, picking_type = 'Упаковка') — count × rate
         ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type = N'Упаковка' THEN ISNULL(o.count, 0) ELSE 0 END), 0)
                                                                  AS total_packing,
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type = N'Упаковка' AND wp.rate IS NOT NULL
-                        THEN ISNULL(o.count, 0) * wp.rate ELSE 0 END), 0)
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.picking_type = N'Упаковка' AND COALESCE(wr.rate, wp.rate) IS NOT NULL
+                        THEN ISNULL(o.count, 0) * COALESCE(wr.rate, wp.rate) ELSE 0 END), 0)
                                                                  AS packing_amount,
         -- Итого (не изменилось — сумма всех трёх блоков)
         ISNULL(SUM(CASE WHEN wn.wcr_code IS NOT NULL THEN o.amount ELSE 0 END), 0) +
-        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND wp.rate IS NOT NULL
-                        THEN ISNULL(o.count, 0) * wp.rate ELSE 0 END), 0)
+        ISNULL(SUM(CASE WHEN wp.wcr_code IS NOT NULL AND COALESCE(wr.rate, wp.rate) IS NOT NULL
+                        THEN ISNULL(o.count, 0) * COALESCE(wr.rate, wp.rate) ELSE 0 END), 0)
                                                                  AS total_amount
       FROM operations o
       INNER JOIN users u       ON o.user_id = u.id
       LEFT  JOIN wcr_norms wn  ON wn.wcr_code = o.wcr_code AND wn.is_active = 1
       LEFT  JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
+      LEFT  JOIN wcr_warehouse_rates wr ON wr.warehouse_code = o.warehouse_code
+        AND wr.wcr_code = o.wcr_code AND wr.is_active = 1
+        AND o.operation_date >= wr.valid_from
+        AND (wr.valid_to IS NULL OR o.operation_date <= wr.valid_to)
       WHERE u.warehouse_id = @warehouseId
         AND u.is_active = 1
         AND u.employee_id != '00000000'
@@ -495,21 +499,25 @@ export class NormsService {
           wp.description_new   AS description,
           wp.participant_area,
           wp.picking_type,
-          wp.rate,
+          COALESCE(wr.rate, wp.rate) AS rate,
           SUM(ISNULL(o.count, 0))  AS total_prod,
-          SUM(ISNULL(o.count, 0) * ISNULL(wp.rate, 0)) AS total_amount,
+          SUM(ISNULL(o.count, 0) * ISNULL(COALESCE(wr.rate, wp.rate), 0)) AS total_amount,
           COUNT(*)                       AS operations_count,
           MIN(o.operation_date)          AS first_date,
           MAX(o.operation_date)          AS last_date
         FROM operations o
         INNER JOIN wcr_picking_norms wp ON wp.wcr_code = o.wcr_code AND wp.is_active = 1
+        LEFT  JOIN wcr_warehouse_rates wr ON wr.warehouse_code = o.warehouse_code
+          AND wr.wcr_code = o.wcr_code AND wr.is_active = 1
+          AND o.operation_date >= wr.valid_from
+          AND (wr.valid_to IS NULL OR o.operation_date <= wr.valid_to)
         INNER JOIN users u ON o.user_id = u.id
         WHERE u.id = @employeeId
           AND u.warehouse_id = @warehouseId
           AND o.operation_date >= @startDate
           AND o.operation_date <  DATEADD(DAY, 1, CAST(@endDate AS DATE))
           AND ISNULL(o.count, 0) > 0
-        GROUP BY o.wcr_code, wp.description_new, wp.participant_area, wp.picking_type, wp.rate
+        GROUP BY o.wcr_code, wp.description_new, wp.participant_area, wp.picking_type, COALESCE(wr.rate, wp.rate)
         ORDER BY total_amount DESC
         `,
         { employeeId, warehouseId, startDate, endDate },
