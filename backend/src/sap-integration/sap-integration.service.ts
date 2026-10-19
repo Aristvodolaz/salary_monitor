@@ -25,6 +25,8 @@ interface SyncContext {
   wcrNormsMap: Map<string, { normType: string }>;
   /** wcr в wcr_picking_norms → комплектация: amount = count × rate */
   pickingNormMap: Map<string, number | null>;
+  /** wcr в wcr_warehouse_rates (только этот склад) → индивидуальная расценка, приоритетнее всего остального */
+  whRateMap: Map<string, { rate: number; area: string }>;
 }
 
 interface ParsedOperation {
@@ -478,8 +480,8 @@ export class SapIntegrationService {
           if (wcrEntry) {
             const tariff = ctx.tariffMap.get(wcrEntry.operation_type);
             const isPicking = ctx.pickingNormMap.has(parsed.wcr);
-            // Комплектация живёт на ставке норм, тариф не обязателен.
-            if (!tariff && !isPicking) {
+            // Комплектация живёт на ставке норм, склад-специфичная расценка тоже заменяет тариф.
+            if (!tariff && !isPicking && !ctx.whRateMap.has(parsed.wcr)) {
               skippedNoTariff++;
               missingTariffs.set(wcrEntry.operation_type, (missingTariffs.get(wcrEntry.operation_type) || 0) + 1);
               continue;
@@ -491,8 +493,9 @@ export class SapIntegrationService {
             // Unmapped: как раньше — сохраняем только коды из wcr_norms.
             // Тариф не подставляем: иначе RPL (и любой unmapped) снова получит 5.9.
             const normEntry = ctx.wcrNormsMap.get(parsed.wcr);
-            if (!normEntry) { skippedNoWcr++; continue; }
-            operationType   = normEntry.normType;
+            const whRate    = ctx.whRateMap.get(parsed.wcr);
+            if (!normEntry && !whRate) { skippedNoWcr++; continue; }
+            operationType   = normEntry?.normType ?? whRate.area;
             participantArea = 'АЕИ';
             amount = this.resolveAmount(parsed, ctx);
             savedAeiFallback++;
@@ -551,7 +554,7 @@ export class SapIntegrationService {
   // ──────────────────────────────────────────────────────────────
 
   private async buildSyncContext(warehouseCode: string, referenceDate: Date): Promise<SyncContext> {
-    const [warehouseRow, users, employees, tariffs, wcrRows, wcrNormsRows, pickingRows] = await Promise.all([
+    const [warehouseRow, users, employees, tariffs, wcrRows, wcrNormsRows, pickingRows, whRateRows] = await Promise.all([
       this.db.queryOne<{ id: number }>(
         `SELECT id FROM warehouses WHERE code = @code`,
         { code: warehouseCode },
@@ -586,9 +589,24 @@ export class SapIntegrationService {
       this.db.query<{ wcr_code: string; rate: number | null }>(
         `SELECT wcr_code, rate FROM wcr_picking_norms WHERE is_active = 1`,
       ),
+      this.db.query<{ wcr_code: string; rate: number; area: string }>(
+        `SELECT wcr_code, CAST(rate AS FLOAT) AS rate, area
+         FROM wcr_warehouse_rates
+         WHERE warehouse_code = @code
+           AND is_active = 1
+           AND @refDate >= valid_from
+           AND (valid_to IS NULL OR @refDate <= valid_to)
+         ORDER BY valid_from DESC`,
+        { code: warehouseCode, refDate: referenceDate },
+      ),
     ]);
 
     if (!warehouseRow) throw new Error(`Склад не найден в БД: ${warehouseCode}`);
+
+    const whRateMap = new Map<string, { rate: number; area: string }>();
+    for (const r of whRateRows) {
+      if (!whRateMap.has(r.wcr_code)) whRateMap.set(r.wcr_code, { rate: r.rate, area: r.area });
+    }
 
     const tariffMap = new Map<string, { rate: number; norm_aei_per_hour: number | null }>();
     for (const t of tariffs) {
@@ -650,6 +668,7 @@ export class SapIntegrationService {
         wcrNormsRows.map((r) => [r.wcr_code, { normType: r.norm_type }]),
       ),
       pickingNormMap: new Map(pickingRows.map((p) => [p.wcr_code, p.rate])),
+      whRateMap,
     };
   }
 
@@ -733,13 +752,18 @@ export class SapIntegrationService {
   }
 
   /**
-   * Одна формула с v_salary_details / migration 017:
-   * комплектация (wcr_picking_norms): АЕИ × ставка норм;
+   * Одна формула с v_salary_details / migration 017 и 021:
+   * индивидуальная расценка склада (wcr_warehouse_rates): АЕИ × rate;
+   * иначе комплектация (wcr_picking_norms): АЕИ × ставка норм;
    * иначе только если WCR в wcr_mapping: АЕИ × тариф;
    * иначе (unmapped, в т.ч. RPL1/2/3/5): 0.
    * prod_count в деньги не идёт.
    */
   private resolveAmount(parsed: ParsedOperation, ctx: SyncContext, tariffRate?: number): number {
+    const whRate = ctx.whRateMap.get(parsed.wcr);
+    if (whRate) {
+      return parsed.aeiCount * whRate.rate;
+    }
     if (ctx.pickingNormMap.has(parsed.wcr)) {
       return parsed.aeiCount * (ctx.pickingNormMap.get(parsed.wcr) ?? 0);
     }
