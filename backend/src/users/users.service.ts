@@ -40,6 +40,75 @@ export class UsersService {
     return this.findInUsersTable(input);
   }
 
+  /** Запись users с паролем по табельному (с учётом ведущих нулей); приоритет у той, где пароль задан. */
+  async findCredentials(employeeId: string) {
+    const input = (employeeId || '').trim();
+    if (!input) return null;
+    const stripped = this.normalizeId(input);
+    const rows = await this.queryNvarchar<{ id: number; employee_id: string; password_hash: string | null }>(
+      `SELECT id, employee_id, password_hash FROM users
+       WHERE LTRIM(RTRIM(employee_id)) IN (@input, @stripped, @padded)
+          OR RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(employee_id)), 8) = @padded`,
+      { input, stripped, padded: this.padEmployeeId(input) },
+    );
+    const matches = rows.filter((r) => this.normalizeId(r.employee_id) === stripped);
+    return matches.find((r) => r.password_hash) || matches[0] || null;
+  }
+
+  private normalizeSurname(raw: string): string {
+    return (raw || '').trim().toLowerCase().replace(/ё/g, 'е');
+  }
+
+  /**
+   * Регистрация: сотрудник должен быть в sap_employees (EWM) на выбранном складе,
+   * введённая фамилия совпадает с первым словом employee_name. Склад и роль — из БД.
+   * Возвращает null, если данные не совпали.
+   */
+  async completeRegistration(
+    employeeId: string,
+    warehouseId: number,
+    lastName: string,
+    passwordHash: string,
+  ) {
+    const wh = await this.db.queryOne<{ id: number; code: string }>(
+      `SELECT id, code FROM warehouses WHERE id = @warehouseId AND is_active = 1`,
+      { warehouseId },
+    );
+    if (!wh) return null;
+
+    const input = (employeeId || '').trim();
+    const stripped = this.normalizeId(input);
+    const rows = await this.queryNvarchar<any>(
+      `SELECT personnel_number, employee_name FROM sap_employees
+       WHERE (is_active = 1 OR is_active IS NULL)
+         AND LTRIM(RTRIM(lgnum)) = @code
+         AND (LTRIM(RTRIM(personnel_number)) IN (@input, @stripped, @padded)
+              OR RIGHT(REPLICATE('0', 8) + LTRIM(RTRIM(personnel_number)), 8) = @padded)`,
+      { code: (wh.code || '').trim(), input, stripped, padded: this.padEmployeeId(input) },
+    );
+    const surname = this.normalizeSurname(lastName);
+    const emp = rows.find(
+      (e) =>
+        this.normalizeId(e.personnel_number) === stripped &&
+        this.normalizeSurname((e.employee_name || '').trim().split(/\s+/)[0]) === surname,
+    );
+    if (!emp) return null;
+
+    const userRow = await this.ensureUserRow(emp.personnel_number, emp.employee_name, wh.id);
+    if (!userRow?.id) return null;
+
+    const request = this.db.getPool().request();
+    request.input('id', sql.Int, userRow.id);
+    request.input('hash', sql.NVarChar(100), passwordHash);
+    request.input('warehouseId', sql.Int, wh.id);
+    await request.query(
+      `UPDATE users SET password_hash = @hash, warehouse_id = @warehouseId,
+              registered_at = GETDATE(), updated_at = GETDATE()
+       WHERE id = @id AND password_hash IS NULL`,
+    );
+    return userRow.id as number;
+  }
+
   /**
    * Все users.id с тем же табельным: 100029, 000100029 и sap_employees.personnel_number / rsrc.
    * Нужно, чтобы заработок нашёл операции, привязанные к дублю users (паддинг / старый ШК).

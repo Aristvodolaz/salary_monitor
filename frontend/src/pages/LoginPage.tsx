@@ -1,31 +1,70 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, TextField, Button, Typography, Alert } from '@mui/material';
+import { Box, TextField, Button, Typography, Alert, MenuItem } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useAuth } from '../context/AuthContext';
 import { TOKENS } from '../theme';
+import { authAPI } from '../services/api';
 
 const LoginPage = () => {
   const [employeeId, setEmployeeId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [step, setStep] = useState<'id' | 'password' | 'register'>('id');
+  const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [warehouseId, setWarehouseId] = useState<number | ''>('');
+  const [warehouses, setWarehouses] = useState<{ id: number; code: string; name: string }[]>([]);
+  const { login, register } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const resetToId = () => {
+    setStep('id');
+    setPassword('');
+    setPassword2('');
+    setError('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      await login(employeeId);
-      navigate('/');
+      const id = employeeId.trim();
+      if (step === 'id') {
+        const { data } = await authAPI.check(id);
+        if (data.registered) {
+          setStep('password');
+        } else {
+          const res = await authAPI.warehouses();
+          setWarehouses(res.data);
+          setStep('register');
+        }
+      } else if (step === 'password') {
+        await login(id, password);
+        navigate('/');
+      } else {
+        if (password !== password2) {
+          setError('Пароли не совпадают');
+          return;
+        }
+        await register({ employeeId: id, warehouseId: Number(warehouseId), lastName: lastName.trim(), password });
+        navigate('/');
+      }
     } catch (err: any) {
-      setError(err.message || 'Ошибка авторизации');
+      setError(err.message || err.response?.data?.message || 'Ошибка авторизации');
     } finally {
       setLoading(false);
     }
   };
+
+  const submitDisabled =
+    loading ||
+    !employeeId.trim() ||
+    (step === 'password' && !password) ||
+    (step === 'register' && (!warehouseId || !lastName.trim() || password.length < 6 || !password2));
 
   return (
     <Box
@@ -195,10 +234,14 @@ const LoginPage = () => {
             variant="h5"
             sx={{ fontWeight: 700, mb: 0.5, color: 'var(--color-text-primary)' }}
           >
-            Вход в систему
+            {step === 'register' ? 'Регистрация' : 'Вход в систему'}
           </Typography>
           <Typography variant="body2" sx={{ color: 'var(--color-text-secondary)', mb: 3 }}>
-            Введите табельный номер сотрудника
+            {step === 'register'
+              ? 'Первый вход: подтвердите данные из EWM и задайте пароль'
+              : step === 'password'
+                ? 'Введите пароль'
+                : 'Введите табельный номер сотрудника'}
           </Typography>
 
           {error && (
@@ -207,42 +250,95 @@ const LoginPage = () => {
             </Alert>
           )}
 
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleSubmit}>
             <TextField
               fullWidth
               label="Табельный номер"
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
-              autoFocus
+              autoFocus={step === 'id'}
               required
+              disabled={step !== 'id'}
               inputProps={{ inputMode: 'numeric' }}
               sx={{ mb: 2.5 }}
             />
+            {step === 'register' && (
+              <>
+                <TextField
+                  select
+                  fullWidth
+                  label="Склад"
+                  value={warehouseId}
+                  onChange={(e) => setWarehouseId(Number(e.target.value))}
+                  required
+                  sx={{ mb: 2.5 }}
+                >
+                  {warehouses.map((w) => (
+                    <MenuItem key={w.id} value={w.id}>
+                      {w.code} — {w.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  fullWidth
+                  label="Фамилия"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  autoFocus
+                  sx={{ mb: 2.5 }}
+                />
+              </>
+            )}
+            {step !== 'id' && (
+              <TextField
+                fullWidth
+                type="password"
+                label={step === 'register' ? 'Придумайте пароль (от 6 символов)' : 'Пароль'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoFocus={step === 'password'}
+                required
+                autoComplete={step === 'register' ? 'new-password' : 'current-password'}
+                sx={{ mb: 2.5 }}
+              />
+            )}
+            {step === 'register' && (
+              <TextField
+                fullWidth
+                type="password"
+                label="Повторите пароль"
+                value={password2}
+                onChange={(e) => setPassword2(e.target.value)}
+                required
+                autoComplete="new-password"
+                sx={{ mb: 2.5 }}
+              />
+            )}
             <Button
               type="submit"
               fullWidth
               variant="contained"
               size="large"
-              disabled={loading || !employeeId}
+              disabled={submitDisabled}
               sx={{ py: 1.5 }}
             >
-              {loading ? 'Выполняется вход...' : 'Войти'}
+              {loading
+                ? 'Подождите...'
+                : step === 'id'
+                  ? 'Далее'
+                  : step === 'password'
+                    ? 'Войти'
+                    : 'Зарегистрироваться'}
             </Button>
           </form>
 
-          <Typography
-            variant="caption"
-            sx={{
-              display: 'block',
-              mt: 3,
-              textAlign: 'center',
-              color: 'var(--color-text-muted)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.75rem',
-            }}
-          >
-            Тест: 00000001 · 00000002 · 00000099 (admin)
-          </Typography>
+          {step !== 'id' && (
+            <Button fullWidth size="small" sx={{ mt: 2 }} onClick={resetToId}>
+              Другой табельный номер
+            </Button>
+          )}
+
         </Box>
       </Box>
     </Box>

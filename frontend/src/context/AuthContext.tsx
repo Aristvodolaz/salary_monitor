@@ -9,10 +9,18 @@ interface User {
   warehouseId: number;
 }
 
+export interface RegisterData {
+  employeeId: string;
+  warehouseId: number;
+  lastName: string;
+  password: string;
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (employeeId: string) => Promise<void>;
+  login: (employeeId: string, password: string) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
   logout: () => void;
 }
 
@@ -43,15 +51,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const login = async (employeeId: string) => {
+  const login = async (employeeId: string, password: string) => {
     try {
-      const response = await authAPI.loginByBarcode(employeeId);
+      const response = await authAPI.login(employeeId, password);
       const { access_token, user: userData } = response.data;
       
       localStorage.setItem('access_token', access_token);
       setUser(userData);
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Ошибка авторизации');
+      throw new Error([].concat(error.response?.data?.message || 'Ошибка авторизации').join('. '));
+    }
+  };
+
+  const register = async (data: RegisterData) => {
+    try {
+      const response = await authAPI.register(data);
+      const { access_token, user: userData } = response.data;
+      localStorage.setItem('access_token', access_token);
+      setUser(userData);
+    } catch (error: any) {
+      throw new Error([].concat(error.response?.data?.message || 'Ошибка регистрации').join('. '));
     }
   };
 
@@ -61,7 +80,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

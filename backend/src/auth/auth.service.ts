@@ -1,6 +1,14 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
+import { DatabaseService } from '../database/database.service';
+import { RegisterDto } from './dto/register.dto';
 import { LoggerService } from '../common/logger/logger.service';
 
 @Injectable()
@@ -8,28 +16,64 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private db: DatabaseService,
     private logger: LoggerService,
   ) {}
 
+  /** Список складов для выпадающего списка регистрации (без авторизации). */
+  async getWarehouses() {
+    return this.db.query(`SELECT id, code, name FROM warehouses WHERE is_active = 1 ORDER BY code`);
+  }
+
+  /** Первый вход? registered=false → фронт показывает регистрацию, иначе ввод пароля. */
+  async checkEmployee(employeeId: string) {
+    const cred = await this.usersService.findCredentials(employeeId);
+    return { registered: !!cred?.password_hash };
+  }
+
   /**
-   * Авторизация по табельному номеру из sap_employees
+   * Регистрация: табельный + склад + фамилия сверяются с sap_employees (EWM), затем сохраняется пароль.
    */
-  async loginByBarcode(employeeId: string) {
-    const user = await this.usersService.findByEmployeeId(employeeId);
-
-    if (!user) {
-      this.logger.warn(`Попытка входа с неизвестным табельным: ${employeeId}`);
-      throw new UnauthorizedException('Пользователь не найден');
+  async register(dto: RegisterDto) {
+    const existing = await this.usersService.findCredentials(dto.employeeId);
+    if (existing?.password_hash) {
+      throw new ConflictException('Этот табельный номер уже зарегистрирован. Войдите по паролю');
     }
 
-    if (!user.is_active) {
-      this.logger.warn(`Попытка входа заблокированного пользователя: ${employeeId}`);
-      throw new UnauthorizedException('Пользователь заблокирован');
+    const hash = await bcrypt.hash(dto.password, 10);
+    const userId = await this.usersService.completeRegistration(
+      dto.employeeId,
+      dto.warehouseId,
+      dto.lastName,
+      hash,
+    );
+    if (!userId) {
+      this.logger.warn(`Регистрация отклонена, данные не совпали с EWM: ${dto.employeeId}`);
+      throw new NotFoundException(
+        'Данные не совпадают с EWM: проверьте табельный номер, склад и фамилию',
+      );
     }
+    return this.issueToken(userId);
+  }
+
+  /** Вход по табельному и паролю. */
+  async login(employeeId: string, password: string) {
+    const cred = await this.usersService.findCredentials(employeeId);
+    const ok = cred?.password_hash && (await bcrypt.compare(password, cred.password_hash));
+    if (!ok) {
+      this.logger.warn(`Неудачный вход: ${employeeId}`);
+      throw new UnauthorizedException('Неверный табельный номер или пароль');
+    }
+    return this.issueToken(cred.id);
+  }
+
+  private async issueToken(userId: number) {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new UnauthorizedException('Пользователь не найден');
+    if (!user.is_active) throw new UnauthorizedException('Пользователь заблокирован');
 
     this.logger.log(`Вход: ${user.fio} (${user.employeeId})`, 'AuthService');
 
-    // Генерация JWT
     const payload = {
       sub: user.id,
       employeeId: user.employee_id,
@@ -37,10 +81,8 @@ export class AuthService {
       warehouseId: user.warehouse_id,
     };
 
-    const accessToken = this.jwtService.sign(payload);
-
     return {
-      access_token: accessToken,
+      access_token: this.jwtService.sign(payload),
       user: {
         id: user.id,
         employeeId: user.employee_id,
@@ -72,4 +114,3 @@ export class AuthService {
     };
   }
 }
-

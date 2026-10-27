@@ -57,8 +57,12 @@ api.interceptors.response.use(
 
 // API методы
 export const authAPI = {
-  loginByBarcode: (employeeId: string) =>
-    api.post('/auth/barcode', { employeeId }),
+  warehouses: () => api.get('/auth/warehouses'),
+  check: (employeeId: string) => api.post('/auth/check', { employeeId }),
+  login: (employeeId: string, password: string) =>
+    api.post('/auth/login', { employeeId, password }),
+  register: (data: { employeeId: string; warehouseId: number; lastName: string; password: string }) =>
+    api.post('/auth/register', data),
 };
 
 export const salaryAPI = {

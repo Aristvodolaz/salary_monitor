@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { Response } from 'express';
 import * as ExcelJS from 'exceljs';
 import { DatabaseService } from '../database/database.service';
@@ -16,15 +16,26 @@ export class AdminService {
   /**
    * Получить список всех активных складов
    */
-  async getWarehouses() {
-    return this.db.query(`SELECT id, code, name FROM warehouses WHERE is_active = 1 ORDER BY code`);
+  async getWarehouses(adminUser: any) {
+    return this.db.query(
+      `SELECT id, code, name FROM warehouses WHERE is_active = 1 AND id = @id`,
+      { id: adminUser.warehouseId },
+    );
+  }
+
+  /** Админ работает только со своим складом; чужой warehouseId из запроса отклоняется. */
+  private async resolveWarehouse(adminUser: any, requested?: number): Promise<number> {
+    if (requested && requested !== adminUser.warehouseId) {
+      throw new ForbiddenException('Нет доступа к этому складу');
+    }
+    return adminUser.warehouseId;
   }
 
   /**
    * Получить всех сотрудников склада (только для админа)
    */
   async getEmployeesByWarehouse(adminUser: any, warehouseId?: number) {
-    const targetWarehouseId = warehouseId || adminUser.warehouseId;
+    const targetWarehouseId = await this.resolveWarehouse(adminUser, warehouseId);
     return this.usersService.findByWarehouse(targetWarehouseId);
   }
 
@@ -37,7 +48,7 @@ export class AdminService {
     endDate: string,
     warehouseId?: number,
   ) {
-    const targetWarehouseId = warehouseId || adminUser.warehouseId;
+    const targetWarehouseId = await this.resolveWarehouse(adminUser, warehouseId);
 
     const query = `
       SELECT 
@@ -166,7 +177,7 @@ export class AdminService {
    * Статистика склада
    */
   async getWarehouseStats(adminUser: any, warehouseId?: number, startDate?: string, endDate?: string) {
-    const targetWarehouseId = warehouseId || adminUser.warehouseId;
+    const targetWarehouseId = await this.resolveWarehouse(adminUser, warehouseId);
 
     const query = `
       SELECT
@@ -317,7 +328,7 @@ export class AdminService {
     warehouseId?: number,
     filterEmployeeId?: number,
   ) {
-    const targetWarehouseId = warehouseId || adminUser.warehouseId;
+    const targetWarehouseId = await this.resolveWarehouse(adminUser, warehouseId);
 
     // 1. Загружаем сотрудников
     let employeesQuery = `
