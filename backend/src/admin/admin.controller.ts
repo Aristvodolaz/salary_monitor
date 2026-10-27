@@ -27,8 +27,8 @@ export class AdminController {
    * Список всех активных складов (для дропдауна)
    */
   @Get('warehouses')
-  async getWarehouses() {
-    return this.adminService.getWarehouses();
+  async getWarehouses(@CurrentUser() user: any) {
+    return this.adminService.getWarehouses(user);
   }
 
   /**
