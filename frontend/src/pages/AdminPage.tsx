@@ -1166,15 +1166,18 @@ const AdminPage = () => {
                                 ШК: <HighlightText text={String(emp.employee_id)} query={search} />
                               </Typography>
                             </Box>
-                            <Tooltip title="Сбросить пароль (повторная регистрация)">
-                              <IconButton
+                            <Tooltip title="Сотрудник заново пройдёт регистрацию и задаст новый пароль">
+                              <Button
                                 size="small"
+                                variant="outlined"
+                                color="warning"
+                                startIcon={<LockReset fontSize="small" />}
                                 aria-label={`Сбросить пароль ${emp.fio}`}
-                                sx={{ color: 'var(--color-text-muted)' }}
+                                sx={{ whiteSpace: 'nowrap', fontSize: '0.75rem', py: 0.25 }}
                                 onClick={(e) => { e.stopPropagation(); handleResetPassword(emp); }}
                               >
-                                <LockReset fontSize="small" />
-                              </IconButton>
+                                Сбросить пароль
+                              </Button>
                             </Tooltip>
                           </Box>
                         </TableCell>
