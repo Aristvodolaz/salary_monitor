@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
 import * as ExcelJS from 'exceljs';
 import { DatabaseService } from '../database/database.service';
@@ -70,6 +70,28 @@ export class AdminService {
     `;
 
     return this.db.query(query, { warehouseId: targetWarehouseId, startDate, endDate });
+  }
+
+  /**
+   * Сброс пароля сотрудника своего склада: пользователь снова проходит регистрацию.
+   * Админов сбрасывать нельзя (в т.ч. себя).
+   */
+  async resetEmployeePassword(adminUser: any, employeeUserId: number) {
+    const target = await this.db.queryOne<{ id: number; fio: string; role: string; warehouse_id: number }>(
+      `SELECT id, fio, role, warehouse_id FROM users WHERE id = @id`,
+      { id: employeeUserId },
+    );
+    if (!target || target.warehouse_id !== adminUser.warehouseId) {
+      throw new NotFoundException('Сотрудник не найден на вашем складе');
+    }
+    if (target.role === 'admin') {
+      throw new ForbiddenException('Нельзя сбросить пароль администратора');
+    }
+    await this.db.execute(
+      `UPDATE users SET password_hash = NULL, registered_at = NULL, updated_at = GETDATE() WHERE id = @id`,
+      { id: target.id },
+    );
+    return { success: true, fio: target.fio };
   }
 
   /**

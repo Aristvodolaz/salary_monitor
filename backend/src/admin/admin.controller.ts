@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Query,
   Param,
   ParseIntPipe,
@@ -76,6 +77,18 @@ export class AdminController {
       warehouseId,
     );
     return result.csv;
+  }
+
+  /**
+   * POST /api/admin/employees/:id/reset-password
+   * Сбросить пароль сотрудника своего склада (повторная регистрация)
+   */
+  @Post('employees/:id/reset-password')
+  async resetEmployeePassword(
+    @CurrentUser() user: any,
+    @Param('id', ParseIntPipe) employeeId: number,
+  ) {
+    return this.adminService.resetEmployeePassword(user, employeeId);
   }
 
   /**
