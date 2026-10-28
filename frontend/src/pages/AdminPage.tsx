@@ -41,6 +41,7 @@ import {
   NavigateBefore,
   NavigateNext,
   BugReport,
+  LockReset,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { adminAPI } from '../services/api';
@@ -404,6 +405,7 @@ const AdminPage = () => {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   // Period
   const [period, setPeriod] = useState<Period>('month');
@@ -563,6 +565,19 @@ const AdminPage = () => {
   };
 
   // ── Expand/collapse row ──────────────────────────────────────────────────────
+  const handleResetPassword = async (emp: any) => {
+    if (!window.confirm(`Сбросить пароль сотрудника ${emp.fio}? Он заново пройдёт регистрацию.`)) return;
+    setError('');
+    setNotice('');
+    try {
+      await adminAPI.resetEmployeePassword(emp.user_id);
+      setNotice(`Пароль сброшен: ${emp.fio}. При следующем входе сотрудник пройдёт регистрацию заново.`);
+    } catch (err: any) {
+      const msg = err.response?.data?.message;
+      setError([].concat(msg || 'Не удалось сбросить пароль').join('. '));
+    }
+  };
+
   const handleToggleExpand = (emp: any) => {
     if (expandedId === emp.user_id) {
       setExpandedId(null);
@@ -744,6 +759,7 @@ const AdminPage = () => {
       />
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+      {notice && <Alert severity="success" sx={{ mb: 3 }} onClose={() => setNotice('')}>{notice}</Alert>}
 
       {/* ── Stat cards ── */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -1142,7 +1158,7 @@ const AdminPage = () => {
                             >
                               {getInitials(emp.fio)}
                             </Box>
-                            <Box>
+                            <Box sx={{ flexGrow: 1 }}>
                               <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text-primary)' }}>
                                 <HighlightText text={emp.fio} query={search} />
                               </Typography>
@@ -1150,6 +1166,16 @@ const AdminPage = () => {
                                 ШК: <HighlightText text={String(emp.employee_id)} query={search} />
                               </Typography>
                             </Box>
+                            <Tooltip title="Сбросить пароль (повторная регистрация)">
+                              <IconButton
+                                size="small"
+                                aria-label={`Сбросить пароль ${emp.fio}`}
+                                sx={{ color: 'var(--color-text-muted)' }}
+                                onClick={(e) => { e.stopPropagation(); handleResetPassword(emp); }}
+                              >
+                                <LockReset fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
                           </Box>
                         </TableCell>
 

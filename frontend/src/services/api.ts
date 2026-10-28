@@ -89,6 +89,8 @@ export const adminAPI = {
   getWarehouses: () => api.get<{ id: number; code: string; name: string }[]>('/admin/warehouses'),
   getEmployees: (warehouseId?: number) =>
     api.get('/admin/employees', { params: { warehouseId } }),
+  resetEmployeePassword: (userId: string | number) =>
+    api.post(`/admin/employees/${userId}/reset-password`),
   getWarehouseSalary: (startDate: string, endDate: string, warehouseId?: number) =>
     api.get('/admin/salary', { params: { startDate, endDate, warehouseId } }),
   exportSalary: (startDate: string, endDate: string, warehouseId?: number) =>
