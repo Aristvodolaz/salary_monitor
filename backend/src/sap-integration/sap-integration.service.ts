@@ -139,7 +139,9 @@ export class SapIntegrationService {
    */
   async syncYesterday(): Promise<void> {
     const now       = new Date();
-    const todayUtc  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    // Календарная дата берётся по локальному времени сервера (cron в 02:00 локально):
+    // при TZ восточнее UTC getUTC*() в 02:00 ещё «позавчера» и грузился D-2 вместо D-1.
+    const todayUtc  = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
     const yestStart = new Date(todayUtc);
     yestStart.setUTCDate(yestStart.getUTCDate() - 1);
     const yestEnd   = new Date(todayUtc.getTime() - 1); // 23:59:59.999 вчера
