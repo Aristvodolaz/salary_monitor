@@ -13,7 +13,17 @@ export interface WarehouseRateRow {
   /** Текущая индивидуальная ставка этого склада, null — используется общая */
   custom_rate: number | null;
   custom_from: string | null;
+  /** Можно ли откатить последнее изменение через интерфейс */
+  can_rollback?: boolean;
+  /** Значение, к которому вернёт откат (null = общая ставка); имеет смысл при can_rollback */
+  prev_rate?: number | null;
+  prev_changed_at?: string | null;
 }
+
+export type RateAction = 'set' | 'reset' | 'rollback';
+
+const sameRate = (a: number | null | undefined, b: number | null | undefined) =>
+  (a ?? null) === (b ?? null) || (a != null && b != null && Math.abs(a - b) < 0.005);
 
 export interface SetRateResult {
   warehouse_code: string;
@@ -88,10 +98,9 @@ export class WarehouseRatesService {
     const warehouse = await this.resolveWarehouse(warehouseId);
     const rates = await this.db.query<WarehouseRateRow>(
       `
+      -- Только тарифы этого склада: коды с операциями на складе или с его индивидуальной ставкой
       WITH codes AS (
-        SELECT wcr_code FROM wcr_picking_norms WHERE is_active = 1
-        UNION
-        SELECT wcr_code FROM wcr_mapping WHERE is_active = 1
+        SELECT DISTINCT wcr_code FROM operations WHERE warehouse_code = @wh AND wcr_code IS NOT NULL
         UNION
         SELECT wcr_code FROM wcr_warehouse_rates WHERE warehouse_code = @wh AND is_active = 1
       )
@@ -125,11 +134,80 @@ export class WarehouseRatesService {
           AND (r.valid_to IS NULL OR CAST(GETDATE() AS DATE) <= r.valid_to)
         ORDER BY r.valid_from DESC
       ) cur
+      WHERE wp.wcr_code IS NOT NULL OR wm.wcr_code IS NOT NULL OR cur.rate IS NOT NULL
       ORDER BY COALESCE(cur.area, wp.participant_area, wm.participant_area, N''), c.wcr_code
       `,
       { wh: warehouse.code },
     );
+
+    // Последняя запись журнала по каждому коду. Без миграции 022 таблицы нет — откат просто недоступен.
+    let lastLog: { wcr_code: string; old_rate: number | null; new_rate: number | null; changed_at: string }[] = [];
+    try {
+      lastLog = await this.db.query(
+        `SELECT wcr_code, CAST(old_rate AS FLOAT) AS old_rate, CAST(new_rate AS FLOAT) AS new_rate,
+                CONVERT(VARCHAR(19), changed_at, 120) AS changed_at
+         FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY wcr_code ORDER BY id DESC) AS rn
+               FROM wcr_warehouse_rate_log WHERE warehouse_code = @wh) x
+         WHERE rn = 1`,
+        { wh: warehouse.code },
+      );
+    } catch {
+      lastLog = [];
+    }
+    const logByCode = new Map(lastLog.map((l) => [l.wcr_code, l]));
+    for (const r of rates) {
+      const l = logByCode.get(r.wcr_code);
+      // Откат возможен, только если журнал согласован с текущей ставкой (её не меняли в обход интерфейса)
+      r.can_rollback = !!l && sameRate(l.new_rate, r.custom_rate);
+      r.prev_rate = l ? l.old_rate : null;
+      r.prev_changed_at = l ? l.changed_at : null;
+    }
     return { warehouse, rates };
+  }
+
+  /** Текущая (на сегодня) индивидуальная ставка склада по WCR или null. */
+  private async currentRate(warehouseCode: string, wcr: string): Promise<number | null> {
+    const row = await this.db.queryOne<{ rate: number }>(
+      `SELECT TOP 1 CAST(rate AS FLOAT) AS rate FROM wcr_warehouse_rates
+       WHERE warehouse_code = @wh AND wcr_code = @wcr AND is_active = 1
+         AND CAST(GETDATE() AS DATE) >= valid_from
+         AND (valid_to IS NULL OR CAST(GETDATE() AS DATE) <= valid_to)
+       ORDER BY valid_from DESC`,
+      { wh: warehouseCode, wcr },
+    );
+    return row ? row.rate : null;
+  }
+
+  /**
+   * Откат последнего изменения ставки по WCR: возвращает предыдущее значение (или общую ставку)
+   * с сегодняшней даты. Сам откат тоже пишется в журнал, поэтому его можно откатить обратно.
+   */
+  async rollback(
+    warehouseId: number,
+    wcrCode: string,
+    actor: { id: number; employeeId: string },
+  ): Promise<SetRateResult> {
+    const warehouse = await this.resolveWarehouse(warehouseId);
+    const code = (wcrCode || '').trim().toUpperCase();
+    if (!code || code.length > 50) throw new BadRequestException('Некорректный код WCR');
+
+    let last: { old_rate: number | null; new_rate: number | null } | null;
+    try {
+      last = await this.db.queryOne(
+        `SELECT TOP 1 CAST(old_rate AS FLOAT) AS old_rate, CAST(new_rate AS FLOAT) AS new_rate
+         FROM wcr_warehouse_rate_log WHERE warehouse_code = @wh AND wcr_code = @wcr ORDER BY id DESC`,
+        { wh: warehouse.code, wcr: code },
+      );
+    } catch {
+      throw new BadRequestException('Журнал изменений недоступен (не применена миграция 022)');
+    }
+    if (!last) throw new BadRequestException('Нет предыдущего значения для отката');
+
+    const current = await this.currentRate(warehouse.code, code);
+    if (!sameRate(last.new_rate, current)) {
+      throw new BadRequestException('Текущая ставка была изменена вне интерфейса — откат невозможен');
+    }
+    return this.setRate(warehouseId, code, last.old_rate, undefined, actor, 'rollback');
   }
 
   /**
@@ -147,8 +225,10 @@ export class WarehouseRatesService {
     rateInput: unknown,
     effectiveFromInput: unknown,
     actor: { id: number; employeeId: string },
+    action?: RateAction,
   ): Promise<SetRateResult> {
     const { rate, effectiveFrom } = validateRateInput(rateInput, effectiveFromInput);
+    const act: RateAction = action ?? (rate === null ? 'reset' : 'set');
     const warehouse = await this.resolveWarehouse(warehouseId);
     const code = (wcrCode || '').trim().toUpperCase();
     if (!code || code.length > 50) throw new BadRequestException('Некорректный код WCR');
@@ -189,6 +269,15 @@ export class WarehouseRatesService {
       );
       const norm: number | null = normRow.recordset[0]?.norm_aei_per_hour ?? null;
 
+      // Значение, действовавшее на дату вступления, — для журнала и отката
+      const oldRow = await req().query(
+        `SELECT TOP 1 CAST(rate AS FLOAT) AS rate FROM wcr_warehouse_rates
+         WHERE warehouse_code = @wh AND wcr_code = @wcr AND is_active = 1
+           AND valid_from <= @from AND (valid_to IS NULL OR valid_to >= @from)
+         ORDER BY valid_from DESC`,
+      );
+      const oldRate: number | null = oldRow.recordset[0]?.rate ?? null;
+
       // 1. Строки, начинающиеся с этой даты или позже, вытесняются новой версией
       await req().query(
         `DELETE FROM wcr_warehouse_rates WHERE warehouse_code = @wh AND wcr_code = @wcr AND valid_from >= @from`,
@@ -208,6 +297,20 @@ export class WarehouseRatesService {
         await ins.query(
           `INSERT INTO wcr_warehouse_rates (warehouse_code, wcr_code, area, norm_aei_per_hour, rate, valid_from)
            VALUES (@wh, @wcr, @area, @norm, @rate, @from)`,
+        );
+      }
+
+      // 3.1 Журнал (если миграция 022 применена); без изменений значения — не пишем
+      if (!sameRate(oldRate, rate)) {
+        const lg = req();
+        lg.input('oldRate', sql.Decimal(9, 2), oldRate);
+        lg.input('newRate', sql.Decimal(9, 2), rate);
+        lg.input('action', sql.NVarChar(20), act);
+        lg.input('by', sql.Int, actor.id);
+        await lg.query(
+          `IF OBJECT_ID('wcr_warehouse_rate_log', 'U') IS NOT NULL
+             INSERT INTO wcr_warehouse_rate_log (warehouse_code, wcr_code, old_rate, new_rate, effective_from, action, changed_by)
+             VALUES (@wh, @wcr, @oldRate, @newRate, @from, @action, @by)`,
         );
       }
 

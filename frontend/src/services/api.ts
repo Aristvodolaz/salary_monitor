@@ -155,6 +155,8 @@ export const normsAPI = {
   getWarehouseRates: () => api.get('/norms/warehouse-rates'),
   setWarehouseRate: (wcrCode: string, rate: number | null, effectiveFrom?: string) =>
     api.put(`/norms/warehouse-rates/${encodeURIComponent(wcrCode)}`, { rate, effectiveFrom }),
+  rollbackWarehouseRate: (wcrCode: string) =>
+    api.post(`/norms/warehouse-rates/${encodeURIComponent(wcrCode)}/rollback`),
   // ── Сотрудники ───────────────────────────────────────────────────────────────
   getEmployees: (startDate: string, endDate: string) =>
     api.get('/norms/employees', { params: { startDate, endDate } }),

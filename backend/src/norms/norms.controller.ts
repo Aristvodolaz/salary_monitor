@@ -136,6 +136,18 @@ export class NormsController {
     });
   }
 
+  /**
+   * POST /api/norms/warehouse-rates/:wcrCode/rollback
+   * Откатить последнее изменение расценки на своём складе к предыдущему значению.
+   */
+  @Post('warehouse-rates/:wcrCode/rollback')
+  async rollbackWarehouseRate(@CurrentUser() user: any, @Param('wcrCode') wcrCode: string) {
+    return this.warehouseRates.rollback(user.warehouseId, wcrCode, {
+      id: user.id,
+      employeeId: user.employeeId,
+    });
+  }
+
   // ── Сотрудники ────────────────────────────────────────────────────────────────
 
   /**

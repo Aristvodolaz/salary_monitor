@@ -15,7 +15,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Save, RestartAlt } from '@mui/icons-material';
+import { Save, RestartAlt, Undo } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { normsAPI } from '../services/api';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -28,6 +28,9 @@ interface RateRow {
   default_rate: number | null;
   custom_rate: number | null;
   custom_from: string | null;
+  can_rollback?: boolean;
+  prev_rate?: number | null;
+  prev_changed_at?: string | null;
 }
 
 const fmt = (n: number | null) =>
@@ -102,6 +105,22 @@ const WarehouseRatesPage = () => {
     }
   };
 
+  const onRollback = async (row: RateRow) => {
+    const target = row.prev_rate == null ? 'общую ставку' : `${fmt(row.prev_rate)}`;
+    if (!window.confirm(`Откатить ${row.wcr_code} к предыдущему значению: ${target}?\nСуммы операций с сегодняшнего дня будут пересчитаны.`)) return;
+    setSaving(row.wcr_code);
+    try {
+      const r = await normsAPI.rollbackWarehouseRate(row.wcr_code);
+      setToast({ severity: 'success', msg: `${row.wcr_code}: возвращено ${target} (пересчитано операций: ${r.data.recalculated_operations})` });
+      load();
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      setToast({ severity: 'error', msg: Array.isArray(m) ? m.join(', ') : m || 'Не удалось откатить ставку' });
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const onSave = (row: RateRow) => {
     const parsed = parseInput(edits[row.wcr_code] ?? '');
     if (parsed === 'invalid') {
@@ -122,6 +141,7 @@ const WarehouseRatesPage = () => {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Alert severity="info" sx={{ mb: 2 }}>
+        Показаны тарифы только вашего склада: операции, по которым у вас есть выработка, и ваши индивидуальные ставки.
         Ставка (за 1 АЕИ) действует только на вашем складе. Операции до выбранной даты считаются по прежней ставке;
         суммы операций с этой даты пересчитываются (кроме закрытых расчётных периодов).
       </Alert>
@@ -201,6 +221,13 @@ const WarehouseRatesPage = () => {
                           <Button size="small" startIcon={<RestartAlt />} disabled={busy} sx={{ ml: 0.5 }}
                             onClick={() => submit(r, null)}>
                             Общая
+                          </Button>
+                        )}
+                        {r.can_rollback && (
+                          <Button size="small" startIcon={<Undo />} disabled={busy} sx={{ ml: 0.5 }}
+                            title={`Вернуть ${r.prev_rate == null ? 'общую ставку' : fmt(r.prev_rate)} (изменено ${r.prev_changed_at ?? ''})`}
+                            onClick={() => onRollback(r)}>
+                            Откатить
                           </Button>
                         )}
                       </TableCell>
