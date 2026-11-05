@@ -151,6 +151,10 @@ export const normsAPI = {
   getPickingNorms: () => api.get('/norms/picking'),
   getPickingStats: (startDate: string, endDate: string, warehouseCode?: string) =>
     api.get('/norms/picking/stats', { params: { startDate, endDate, warehouseCode } }),
+  // ── Расценки склада админа ───────────────────────────────────────────────────
+  getWarehouseRates: () => api.get('/norms/warehouse-rates'),
+  setWarehouseRate: (wcrCode: string, rate: number | null, effectiveFrom?: string) =>
+    api.put(`/norms/warehouse-rates/${encodeURIComponent(wcrCode)}`, { rate, effectiveFrom }),
   // ── Сотрудники ───────────────────────────────────────────────────────────────
   getEmployees: (startDate: string, endDate: string) =>
     api.get('/norms/employees', { params: { startDate, endDate } }),

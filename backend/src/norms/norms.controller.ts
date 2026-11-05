@@ -1,5 +1,6 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { NormsService } from './norms.service';
+import { WarehouseRatesService } from './warehouse-rates.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -14,6 +15,7 @@ export class NormsController {
   constructor(
     private normsService: NormsService,
     private sapIntegrationService: SapIntegrationService,
+    private warehouseRates: WarehouseRatesService,
   ) {}
 
   /**
@@ -101,6 +103,37 @@ export class NormsController {
     @Query('warehouseCode') warehouseCode?: string,
   ) {
     return this.normsService.getPickingStats(startDate, endDate, warehouseCode);
+  }
+
+  // ── Расценки склада админа ────────────────────────────────────────────────────
+
+  /**
+   * GET /api/norms/warehouse-rates
+   * Расценки по WCR для склада текущего админа (общая ставка + индивидуальная).
+   */
+  @Get('warehouse-rates')
+  async getWarehouseRates(@CurrentUser() user: any) {
+    return this.warehouseRates.list(user.warehouseId);
+  }
+
+  /**
+   * PUT /api/norms/warehouse-rates/:wcrCode  { rate: number | null, effectiveFrom?: 'YYYY-MM-DD' }
+   * Задать расценку для WCR на СВОЁМ складе (склад берётся из токена, не из запроса).
+   * rate = null — вернуть общую ставку.
+   */
+  @Put('warehouse-rates/:wcrCode')
+  async setWarehouseRate(
+    @CurrentUser() user: any,
+    @Param('wcrCode') wcrCode: string,
+    @Body() body: { rate: number | string | null; effectiveFrom?: string },
+  ) {
+    if (!body || !('rate' in body)) {
+      throw new BadRequestException('Укажите rate (число или null для сброса)');
+    }
+    return this.warehouseRates.setRate(user.warehouseId, wcrCode, body.rate, body.effectiveFrom, {
+      id: user.id,
+      employeeId: user.employeeId,
+    });
   }
 
   // ── Сотрудники ────────────────────────────────────────────────────────────────

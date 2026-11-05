@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import OperationsPage from './pages/OperationsPage';
 import AdminPage from './pages/AdminPage';
 import NormsPage from './pages/NormsPage';
+import WarehouseRatesPage from './pages/WarehouseRatesPage';
 import Layout from './components/Layout';
 
 function App() {
@@ -54,6 +55,10 @@ function App() {
         <Route
           path="/norms"
           element={user?.role === 'admin' ? <NormsPage /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/rates"
+          element={user?.role === 'admin' ? <WarehouseRatesPage /> : <Navigate to="/" />}
         />
         <Route path="*" element={<Navigate to={user ? (isAdmin ? '/admin' : '/') : '/login'} replace />} />
       </Route>

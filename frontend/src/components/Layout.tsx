@@ -21,6 +21,7 @@ import {
   ListAlt,
   AdminPanelSettings,
   Rule,
+  Paid,
   Logout,
   LightMode,
   DarkMode,
@@ -84,6 +85,7 @@ const Layout = () => {
     ? [
         { text: 'Админ-панель', icon: <AdminPanelSettings />, path: '/admin' },
         { text: 'Приемка и Хранение', icon: <Rule />, path: '/norms' },
+        { text: 'Тарифы склада', icon: <Paid />, path: '/rates' },
       ]
     : [
         { text: 'Дашборд', icon: <Dashboard />, path: '/' },
@@ -446,6 +448,14 @@ const Layout = () => {
               icon={<Rule />}
               value="/norms"
               aria-label="Перейти на нормативы WCR"
+            />
+          )}
+          {isAdmin && (
+            <BottomNavigationAction
+              label="Тарифы"
+              icon={<Paid />}
+              value="/rates"
+              aria-label="Перейти на тарифы склада"
             />
           )}
           <BottomNavigationAction
