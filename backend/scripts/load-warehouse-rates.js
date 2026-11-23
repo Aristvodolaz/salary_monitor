@@ -43,8 +43,11 @@ async function main() {
     }
     const whs = new Set((await pool.request().query(`SELECT code FROM warehouses`)).recordset.map((r) => r.code));
     const existing = new Map((await pool.request().query(
-      `SELECT warehouse_code, wcr_code, area, norm_aei_per_hour, CAST(rate AS FLOAT) rate
-       FROM wcr_warehouse_rates WHERE valid_from = '${VALID_FROM}'`,
+      `SELECT warehouse_code, wcr_code, area, norm_aei_per_hour, CAST(rate AS FLOAT) rate,
+              CONVERT(char(10), valid_to, 23) valid_to,
+              CASE WHEN EXISTS (SELECT 1 FROM wcr_warehouse_rates n WHERE n.warehouse_code = r.warehouse_code
+                AND n.wcr_code = r.wcr_code AND n.valid_from > r.valid_from) THEN 1 ELSE 0 END has_newer
+       FROM wcr_warehouse_rates r WHERE valid_from = '${VALID_FROM}'`,
     )).recordset.map((r) => [`${r.warehouse_code}|${r.wcr_code}`, r]));
 
     const toInsert = [];
@@ -53,6 +56,8 @@ async function main() {
       if (!whs.has(r.warehouse)) { console.log(`   нет склада ${r.warehouse} в warehouses — пропуск ${r.wcr}`); continue; }
       const e = existing.get(`${r.warehouse}|${r.wcr}`);
       if (!e) toInsert.push(r);
+      // сброшена к общей в «Тарифах склада» (закрыта, новой версии нет) — не «без изменений», вернуть можно только вручную
+      else if (e.valid_to && !e.has_newer) console.log(`   ЗАКРЫТА в БД ${r.warehouse} ${r.wcr}: действует по ${e.valid_to}, в файле ${r.rate} — не меняется`);
       else if (e.area === r.area && Number(e.norm_aei_per_hour) === r.norm && e.rate === r.rate) same++;
       else console.log(`   РАСХОЖДЕНИЕ с БД ${r.warehouse} ${r.wcr}: БД «${e.area}» ${e.norm_aei_per_hour}/${e.rate}, файл «${r.area}» ${r.norm}/${r.rate} — не меняется`);
     }

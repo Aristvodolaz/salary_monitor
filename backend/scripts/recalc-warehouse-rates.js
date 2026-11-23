@@ -2,7 +2,8 @@
 //
 //   node scripts/recalc-warehouse-rates.js "<файл.xlsx>"          — ТОЛЬКО отчёт «до/после», БД не меняется
 //   node scripts/recalc-warehouse-rates.js --apply [--include-closed] [--warehouse=0SK2]
-//                                                                   — UPDATE из wcr_warehouse_rates
+//        [--from=2026-10-01] [--to=2026-11-30] [--dry-run]           — UPDATE из wcr_warehouse_rates
+//   --from/--to ограничивают даты операций; --dry-run считает и откатывает транзакцию.
 //
 // Формула проекта не меняется: amount = count (АЕИ) × rate. Операции без расценки склада
 // не трогаются (остаются со старым amount) и попадают в отчёт с причиной.
@@ -61,7 +62,7 @@ async function preview(pool, file) {
   console.table(reasons.sort((a, b) => b.aei - a.aei).slice(0, 25));
 }
 
-async function apply(pool, includeClosed, onlyWh) {
+async function apply(pool, includeClosed, onlyWh, from, to, dryRun) {
   const t = await pool.request().query(`SELECT OBJECT_ID('wcr_warehouse_rates','U') AS id`);
   if (!t.recordset[0].id) throw new Error('Нет таблицы wcr_warehouse_rates — сначала migration 021 и load-warehouse-rates.js');
   const whs = (await pool.request().query(
@@ -71,17 +72,28 @@ async function apply(pool, includeClosed, onlyWh) {
     const tx = new sql.Transaction(pool);
     await tx.begin();
     try {
-      const r = await tx.request().input('wh', sql.NVarChar(10), w).query(
+      const req = () => tx.request().input('wh', sql.NVarChar(10), w).input('from', sql.Date, from || null).input('to', sql.Date, to || null);
+      const sum = async () => (await req().query(
+        `SELECT COUNT(*) n, SUM(ISNULL(amount,0)) amt FROM operations o
+         WHERE o.warehouse_code = @wh AND (@from IS NULL OR o.operation_date >= @from) AND (@to IS NULL OR o.operation_date < DATEADD(DAY, 1, @to))`,
+      )).recordset[0];
+      const before = await sum();
+      const r = await req().query(
         `UPDATE o SET o.amount = CAST(o.count AS FLOAT) * CAST(wr.rate AS FLOAT), o.updated_at = GETDATE()
          FROM operations o
          JOIN wcr_warehouse_rates wr ON wr.warehouse_code = o.warehouse_code AND wr.wcr_code = o.wcr_code
           AND wr.is_active = 1 AND o.operation_date >= wr.valid_from AND (wr.valid_to IS NULL OR o.operation_date <= wr.valid_to)
          WHERE o.warehouse_code = @wh
            AND (o.amount IS NULL OR ABS(o.amount - CAST(o.count AS FLOAT) * CAST(wr.rate AS FLOAT)) > 0.000001)
+           AND (@from IS NULL OR o.operation_date >= @from)
+           AND (@to IS NULL OR o.operation_date < DATEADD(DAY, 1, @to))
            ${includeClosed ? '' : `AND NOT ${CLOSED}`}`,
       );
+      const after = await sum();
+      console.log(`${w} [${from || '…'} – ${to || '…'}]: операций в периоде ${before.n}, обновлено ${r.rowsAffected[0]}; ` +
+        `сумма ${money(before.amt)} → ${money(after.amt)} (разница ${money(after.amt - before.amt)})`);
+      if (dryRun) { await tx.rollback(); console.log('   dry-run: откатено, БД не изменена'); continue; }
       await tx.commit();
-      console.log(`${w}: обновлено операций ${r.rowsAffected[0]}`);
     } catch (e) { await tx.rollback(); throw e; }
   }
 }
@@ -96,7 +108,10 @@ async function main() {
   try {
     if (args.includes('--apply')) {
       const wh = (args.find((a) => a.startsWith('--warehouse=')) || '').split('=')[1];
-      await apply(pool, args.includes('--include-closed'), wh);
+      const opt = (k) => (args.find((a) => a.startsWith(`--${k}=`)) || '').split('=')[1];
+      const from = opt('from'), to = opt('to');
+      for (const d of [from, to]) if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error(`Дата должна быть YYYY-MM-DD: ${d}`);
+      await apply(pool, args.includes('--include-closed'), wh, from, to, args.includes('--dry-run'));
     } else {
       const file = args.find((a) => !a.startsWith('--'));
       if (!file) throw new Error('Укажите путь к xlsx');
